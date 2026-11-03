@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Http\Requests\Writing;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class WritingTeacherSubmissionIndexRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'search' => ['nullable', 'string', 'max:100'],
+            'evaluation_status' => ['nullable', Rule::in(['pending', 'evaluated'])],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ];
+    }
+}
