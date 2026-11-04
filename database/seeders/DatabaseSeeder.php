@@ -13,6 +13,11 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             DemoUserSeeder::class,
             DemoCourseSeeder::class,
+            DemoReadingMockSeeder::class,
+            DemoListeningMockSeeder::class,
+            DemoWritingSeeder::class,
+            DemoSpeakingSeeder::class,
+            DemoResultsSeeder::class,
         ]);
     }
 }
