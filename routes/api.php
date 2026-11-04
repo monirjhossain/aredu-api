@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\UserRoleController;
 use App\Http\Controllers\Api\V1\LessonPlaybackController;
 use App\Http\Controllers\Api\V1\LessonProgressController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AdminPaymentController;
 use App\Http\Controllers\Api\V1\BkashPaymentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
@@ -192,7 +193,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware('permission:payments.manage')->group(function () {
+        Route::get('/admin/orders', [AdminOrderController::class, 'index']);
         Route::get('/admin/payments', [AdminPaymentController::class, 'index']);
+        Route::get('/admin/payments/pending-orders', [AdminPaymentController::class, 'pendingOrders']);
+        Route::post('/admin/orders/{order}/confirm-bkash', [AdminPaymentController::class, 'confirmBkash'])->whereNumber('order');
         Route::post('/admin/payments/{payment}/refund', [EnrollmentController::class, 'refund'])->whereNumber('payment');
     });
 
@@ -291,6 +295,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/admin/settings', [SettingController::class, 'update']);
         Route::post('/admin/settings/logo', [SettingController::class, 'storeLogo']);
         Route::delete('/admin/settings/logo', [SettingController::class, 'destroyLogo']);
+        Route::post('/admin/settings/bkash-qr', [SettingController::class, 'storeBkashQr']);
+        Route::delete('/admin/settings/bkash-qr', [SettingController::class, 'destroyBkashQr']);
         Route::get('/admin/activity-logs', [ActivityLogController::class, 'index']);
     });
 

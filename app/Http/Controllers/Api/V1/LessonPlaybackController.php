@@ -19,15 +19,14 @@ class LessonPlaybackController extends Controller
 
     public function __invoke(Request $request, Lesson $lesson): JsonResponse
     {
-        $payload = $this->videos->playbackFor($request->user(), $lesson);
         $progress = $this->progress->forLesson($request->user(), $lesson);
-        $payload['progress'] = $progress;
-
-        $resumeAt = (int) ($progress['position_seconds'] ?? 0);
-        if ($resumeAt > 0 && empty($progress['completed_at'])) {
-            $separator = str_contains($payload['playback']['iframe_url'], '?') ? '&' : '?';
-            $payload['playback']['iframe_url'] .= $separator.'startTime='.$resumeAt;
+        $resumeAt = 0;
+        if (empty($progress['completed_at'])) {
+            $resumeAt = max(0, (int) ($progress['position_seconds'] ?? 0));
         }
+
+        $payload = $this->videos->playbackFor($request->user(), $lesson, $resumeAt);
+        $payload['progress'] = $progress;
 
         return ApiResponse::success($payload, 'Playback authorized.');
     }

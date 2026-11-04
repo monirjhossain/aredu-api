@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Video\VideoCoverRequest;
+use App\Http\Requests\Video\VideoEmbedRequest;
 use App\Http\Resources\VideoResource;
 use App\Http\Responses\ApiResponse;
 use App\Models\Lesson;
@@ -31,15 +32,21 @@ class VideoController extends Controller
         );
     }
 
-    public function store(Lesson $lesson): JsonResponse
+    public function store(VideoEmbedRequest $request, Lesson $lesson): JsonResponse
     {
         $this->authorizeLessonVideo($lesson);
 
-        $created = $this->videos->createDirectUpload($lesson);
-        $payload = VideoResource::make($created['video'])->resolve();
-        $payload['upload_url'] = $created['upload_url'];
+        $video = $this->videos->upsertEmbed(
+            $lesson,
+            (string) $request->validated('url'),
+            $request->validated('duration_seconds'),
+        );
 
-        return ApiResponse::success($payload, 'Video upload created.', 201);
+        return ApiResponse::success(
+            VideoResource::make($video)->resolve(),
+            'Video saved.',
+            201,
+        );
     }
 
     public function storeCover(VideoCoverRequest $request, Lesson $lesson): JsonResponse

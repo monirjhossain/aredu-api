@@ -21,6 +21,13 @@ class OrderResource extends JsonResource
             'total' => $this->total,
             'currency' => $this->currency,
             'created_at' => optional($this->created_at)?->toIso8601String(),
+            'updated_at' => optional($this->updated_at)?->toIso8601String(),
+            'user' => $this->whenLoaded('user', fn () => $this->user ? [
+                'id' => $this->user->id,
+                'name' => $this->user->name,
+                'email' => $this->user->email,
+                'phone' => $this->user->phone,
+            ] : null),
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($item) => [
                 'id' => $item->id,
                 'course_id' => $item->course_id,
@@ -32,6 +39,7 @@ class OrderResource extends JsonResource
                     'title' => $item->course->title,
                     'slug' => $item->course->slug,
                 ] : null,
+                'course_title' => $item->relationLoaded('course') ? $item->course?->title : null,
             ])->values()),
             'payments' => $this->whenLoaded('payments', fn () => PaymentResource::collection($this->payments)->resolve()),
         ];

@@ -22,6 +22,10 @@ class LessonResource extends JsonResource
             'is_published' => $this->is_published,
             'video' => $this->whenLoaded('video', fn () => $this->video ? [
                 'id' => $this->video->id,
+                'provider' => $this->video->provider,
+                'external_id' => $this->video->external_id,
+                'embed_url' => $this->video->embed_url,
+                'source_url' => $this->video->source_url,
                 'status' => $this->video->status,
                 'duration_seconds' => $this->video->duration_seconds,
                 'error_message' => $this->video->error_message,

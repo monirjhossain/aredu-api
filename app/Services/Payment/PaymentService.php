@@ -425,6 +425,62 @@ class PaymentService
         });
     }
 
+    /**
+     * Manual bKash QR payment confirmation by admin (no gateway API).
+     */
+    public function confirmManualBkash(User $admin, Order $order, ?string $trxId = null): Payment
+    {
+        if ($order->status === Order::PAID) {
+            throw ValidationException::withMessages([
+                'order' => ['This order is already paid.'],
+            ]);
+        }
+
+        if ($order->status !== Order::PENDING && $order->status !== Order::FAILED) {
+            throw ValidationException::withMessages([
+                'order' => ['Only pending orders can be confirmed for bKash QR payment.'],
+            ]);
+        }
+
+        $reference = trim((string) $trxId);
+        if ($reference === '') {
+            $reference = 'BKASH-QR-'.$order->order_number;
+        }
+
+        $payment = Payment::query()->create([
+            'order_id' => $order->id,
+            'gateway' => Payment::GATEWAY_BKASH,
+            'status' => Payment::INITIATED,
+            'amount' => $order->total,
+            'currency' => $order->currency ?: 'BDT',
+            'gateway_transaction_id' => 'manual-'.$order->id.'-'.Str::lower(Str::random(8)),
+            'gateway_reference' => null,
+        ]);
+
+        $this->activity->record(
+            $admin,
+            'payment.bkash_qr_confirmed',
+            $payment,
+            'Admin confirmed bKash QR payment for order '.$order->order_number.'.',
+        );
+
+        return $this->markPaid($payment, $reference, $reference);
+    }
+
+    /**
+     * @return list<Order>
+     */
+    public function pendingOrdersForAdmin(): array
+    {
+        return Order::query()
+            ->with(['user:id,name,email', 'items.course:id,title'])
+            ->where('status', Order::PENDING)
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get()
+            ->all();
+    }
+
     private function markPaid(Payment $payment, string $validationId, ?string $bankTranId): Payment
     {
         return DB::transaction(function () use ($payment, $validationId, $bankTranId) {

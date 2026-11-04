@@ -20,7 +20,7 @@ class StudentDashboardService
     public function summary(User $user): array
     {
         $enrollments = Enrollment::query()
-            ->with(['course:id,title,slug,exam_type,duration_minutes,thumbnail_path,category_id', 'course.category:id,name'])
+            ->with(['course:id,title,slug,exam_type,duration_minutes,thumbnail_path,category_id,batch_number', 'course.category:id,name'])
             ->where('user_id', $user->id)
             ->where('status', EnrollmentService::ACTIVE)
             ->orderByDesc('enrolled_at')
@@ -49,6 +49,7 @@ class StudentDashboardService
                         'slug' => $enrollment->course->slug,
                         'exam_type' => $enrollment->course->exam_type,
                         'duration_minutes' => $enrollment->course->duration_minutes,
+                        'batch_number' => $enrollment->course->batch_number,
                         'thumbnail_url' => $enrollment->course->thumbnail_path
                             ? url('storage/'.$enrollment->course->thumbnail_path)
                             : null,

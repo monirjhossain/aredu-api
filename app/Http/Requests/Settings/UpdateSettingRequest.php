@@ -26,6 +26,8 @@ class UpdateSettingRequest extends FormRequest
             'landing_videos' => ['nullable', 'array', 'max:8'],
             'landing_videos.*.title' => ['nullable', 'string', 'max:120'],
             'landing_videos.*.url' => ['required_with:landing_videos', 'string', 'max:500', 'url'],
+            'bkash_merchant_number' => ['nullable', 'string', 'max:32'],
+            'bkash_payment_note' => ['nullable', 'string', 'max:1000'],
             'notify_on_payment' => ['required', 'boolean'],
             'notify_on_enrollment' => ['required', 'boolean'],
             'notify_on_evaluation' => ['required', 'boolean'],

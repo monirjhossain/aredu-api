@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\SettingBkashQrRequest;
 use App\Http\Requests\Settings\SettingLogoRequest;
 use App\Http\Requests\Settings\UpdateSettingRequest;
 use App\Http\Responses\ApiResponse;
@@ -47,6 +48,24 @@ class SettingController extends Controller
         return ApiResponse::success(
             $this->settings->deleteLogo($request->user()),
             'Logo removed.',
+        );
+    }
+
+    public function storeBkashQr(SettingBkashQrRequest $request): JsonResponse
+    {
+        return ApiResponse::success(
+            $this->settings->storeBkashQr($request->user(), $request->file('qr')),
+            'bKash QR updated.',
+        );
+    }
+
+    public function destroyBkashQr(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('settings.manage'), 403);
+
+        return ApiResponse::success(
+            $this->settings->deleteBkashQr($request->user()),
+            'bKash QR removed.',
         );
     }
 

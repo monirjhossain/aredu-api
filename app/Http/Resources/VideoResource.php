@@ -15,6 +15,10 @@ class VideoResource extends JsonResource
         return [
             'id' => $this->id,
             'lesson_id' => $this->lesson_id,
+            'provider' => $this->provider,
+            'external_id' => $this->external_id,
+            'embed_url' => $this->embed_url,
+            'source_url' => $this->source_url,
             'cloudflare_uid' => $this->cloudflare_uid,
             'status' => $this->status,
             'duration_seconds' => $this->duration_seconds,

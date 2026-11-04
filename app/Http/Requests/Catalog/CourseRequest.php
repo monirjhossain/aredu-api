@@ -22,6 +22,12 @@ class CourseRequest extends FormRequest
         if ($this->input('description') === '') {
             $this->merge(['description' => null]);
         }
+
+        foreach (['learners_count', 'batch_number', 'seats_left', 'class_starts_on', 'offer_ends_on'] as $field) {
+            if ($this->input($field) === '') {
+                $this->merge([$field => null]);
+            }
+        }
     }
 
     /**
@@ -50,6 +56,11 @@ class CourseRequest extends FormRequest
             'price' => ['required', 'numeric', 'min:0', 'decimal:0,2', 'max:99999999.99'],
             'discount_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2', 'lt:price'],
             'duration_minutes' => ['required', 'integer', 'min:0', 'max:100000'],
+            'learners_count' => ['nullable', 'integer', 'min:0', 'max:10000000'],
+            'class_starts_on' => ['nullable', 'date'],
+            'batch_number' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'seats_left' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'offer_ends_on' => ['nullable', 'date'],
             'is_published' => ['required', 'boolean'],
         ];
     }

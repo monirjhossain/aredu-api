@@ -34,6 +34,12 @@ class SettingService
 
     public const KEY_LANDING_VIDEOS = 'landing_videos';
 
+    public const KEY_BKASH_QR_PATH = 'bkash_qr_path';
+
+    public const KEY_BKASH_MERCHANT_NUMBER = 'bkash_merchant_number';
+
+    public const KEY_BKASH_PAYMENT_NOTE = 'bkash_payment_note';
+
     public const DEFAULTS = [
         self::KEY_PLATFORM_NAME => 'AR Education IELTS',
         self::KEY_LOGO_PATH => null,
@@ -47,6 +53,9 @@ class SettingService
         self::KEY_NOTIFY_NEW_LESSON => '1',
         self::KEY_ABOUT_TEXT => 'AR Education helps learners prepare for IELTS with structured video courses, timed Reading and Listening mocks, and teacher-evaluated Writing and Speaking practice.',
         self::KEY_LANDING_VIDEOS => '[]',
+        self::KEY_BKASH_QR_PATH => null,
+        self::KEY_BKASH_MERCHANT_NUMBER => '',
+        self::KEY_BKASH_PAYMENT_NOTE => 'Open bKash, scan this QR, send the exact order amount, then wait for admin confirmation.',
     ];
 
     public function __construct(private readonly ActivityLogService $activity) {}
@@ -102,6 +111,21 @@ class SettingService
             'currency' => $this->currency(),
             'about' => (string) $this->get(self::KEY_ABOUT_TEXT, ''),
             'videos' => $this->landingVideos(),
+            'bkash_payment' => $this->bkashPaymentInfo(),
+        ];
+    }
+
+    /**
+     * @return array{qr_url: ?string, merchant_number: string, note: string}
+     */
+    public function bkashPaymentInfo(): array
+    {
+        $qrPath = $this->get(self::KEY_BKASH_QR_PATH);
+
+        return [
+            'qr_url' => $this->logoUrl(is_string($qrPath) ? $qrPath : null),
+            'merchant_number' => (string) $this->get(self::KEY_BKASH_MERCHANT_NUMBER, ''),
+            'note' => (string) $this->get(self::KEY_BKASH_PAYMENT_NOTE, self::DEFAULTS[self::KEY_BKASH_PAYMENT_NOTE]),
         ];
     }
 
@@ -142,6 +166,9 @@ class SettingService
             'currency' => $this->currency(),
             'about_text' => (string) $this->get(self::KEY_ABOUT_TEXT, ''),
             'landing_videos' => $this->landingVideos(),
+            'bkash_payment' => $this->bkashPaymentInfo(),
+            'bkash_merchant_number' => (string) $this->get(self::KEY_BKASH_MERCHANT_NUMBER, ''),
+            'bkash_payment_note' => (string) $this->get(self::KEY_BKASH_PAYMENT_NOTE, self::DEFAULTS[self::KEY_BKASH_PAYMENT_NOTE]),
             'payment_gateways' => $this->paymentGatewayStatus(),
             'course_access_rules' => $this->courseAccessRules(),
             'notification_preferences' => [
@@ -166,6 +193,12 @@ class SettingService
             self::KEY_SUPPORT_EMAIL => $data['support_email'] ?? null,
             self::KEY_CURRENCY => $data['currency'] ?? null,
             self::KEY_ABOUT_TEXT => $data['about_text'] ?? null,
+            self::KEY_BKASH_MERCHANT_NUMBER => array_key_exists('bkash_merchant_number', $data)
+                ? (string) ($data['bkash_merchant_number'] ?? '')
+                : null,
+            self::KEY_BKASH_PAYMENT_NOTE => array_key_exists('bkash_payment_note', $data)
+                ? (string) ($data['bkash_payment_note'] ?? '')
+                : null,
             self::KEY_NOTIFY_PAYMENT => isset($data['notify_on_payment']) ? ($data['notify_on_payment'] ? '1' : '0') : null,
             self::KEY_NOTIFY_ENROLLMENT => isset($data['notify_on_enrollment']) ? ($data['notify_on_enrollment'] ? '1' : '0') : null,
             self::KEY_NOTIFY_EVALUATION => isset($data['notify_on_evaluation']) ? ($data['notify_on_evaluation'] ? '1' : '0') : null,
@@ -245,6 +278,53 @@ class SettingService
             'settings.logo_removed',
             null,
             'Platform logo removed.',
+        );
+
+        return $this->allForAdmin();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function storeBkashQr(User $actor, UploadedFile $file): array
+    {
+        $path = $file->store('bkash-qr', 'public');
+        $previous = $this->get(self::KEY_BKASH_QR_PATH);
+
+        $this->put(self::KEY_BKASH_QR_PATH, $path);
+
+        if (is_string($previous) && $previous !== '' && $previous !== $path) {
+            Storage::disk('public')->delete($previous);
+        }
+
+        $this->activity->record(
+            $actor,
+            'settings.bkash_qr_updated',
+            null,
+            'bKash QR image updated.',
+        );
+
+        return $this->allForAdmin();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function deleteBkashQr(User $actor): array
+    {
+        $previous = $this->get(self::KEY_BKASH_QR_PATH);
+
+        if (is_string($previous) && $previous !== '') {
+            Storage::disk('public')->delete($previous);
+        }
+
+        $this->put(self::KEY_BKASH_QR_PATH, '');
+
+        $this->activity->record(
+            $actor,
+            'settings.bkash_qr_removed',
+            null,
+            'bKash QR image removed.',
         );
 
         return $this->allForAdmin();

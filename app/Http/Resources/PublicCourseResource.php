@@ -22,6 +22,12 @@ class PublicCourseResource extends JsonResource
             'price' => $this->price,
             'discount_price' => $this->discount_price,
             'duration_minutes' => $this->duration_minutes,
+            'learners_count' => $this->learners_count,
+            'class_starts_on' => $this->class_starts_on?->toDateString(),
+            'batch_number' => $this->batch_number,
+            'seats_left' => $this->seats_left,
+            'offer_ends_on' => $this->offer_ends_on?->toDateString(),
+            'offer_days_left' => $this->offerDaysLeft(),
             'is_enrolled' => (bool) ($this->viewer_enrolled ?? false),
             'course_progress' => $this->when(
                 (bool) ($this->viewer_learning ?? false),
@@ -70,5 +76,16 @@ class PublicCourseResource extends JsonResource
                 },
             ),
         ];
+    }
+
+    private function offerDaysLeft(): ?int
+    {
+        if ($this->offer_ends_on === null) {
+            return null;
+        }
+
+        $days = (int) now()->startOfDay()->diffInDays($this->offer_ends_on->copy()->startOfDay(), false);
+
+        return max(0, $days);
     }
 }

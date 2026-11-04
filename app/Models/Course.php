@@ -22,6 +22,11 @@ class Course extends Model
         'price',
         'discount_price',
         'duration_minutes',
+        'learners_count',
+        'class_starts_on',
+        'batch_number',
+        'seats_left',
+        'offer_ends_on',
         'is_published',
     ];
 
@@ -31,6 +36,11 @@ class Course extends Model
             'price' => 'decimal:2',
             'discount_price' => 'decimal:2',
             'is_published' => 'boolean',
+            'class_starts_on' => 'date',
+            'offer_ends_on' => 'date',
+            'learners_count' => 'integer',
+            'batch_number' => 'integer',
+            'seats_left' => 'integer',
         ];
     }
 

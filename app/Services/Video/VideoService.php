@@ -16,17 +16,22 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class VideoService
 {
-    public function __construct(private readonly CloudflareStreamClient $cloudflare) {}
+    public function __construct(
+        private readonly CloudflareStreamClient $cloudflare,
+        private readonly VideoEmbedParser $embeds,
+    ) {}
 
     /**
      * @return array{
      *     lesson_id: int,
      *     duration_seconds: int|null,
-     *     expires_in: int,
-     *     playback: array{token: string, iframe_url: string, hls_url: string}
+     *     cover_url: string|null,
+     *     provider: string|null,
+     *     expires_in: int|null,
+     *     playback: array{token: string|null, iframe_url: string, hls_url: string|null}
      * }
      */
-    public function playbackFor(User $user, Lesson $lesson): array
+    public function playbackFor(User $user, Lesson $lesson, int $resumeAt = 0): array
     {
         $lesson->loadMissing(['section.course', 'video']);
 
@@ -43,31 +48,58 @@ class VideoService
 
         $video = $lesson->video;
 
-        if ($video === null || $video->status !== Video::READY || ! is_string($video->cloudflare_uid) || $video->cloudflare_uid === '') {
+        if ($video === null || $video->status !== Video::READY) {
             throw new HttpException(404, 'This lesson has no ready video.');
         }
 
-        $expiresIn = $this->playbackTtlSeconds();
-        $token = $this->cloudflare->createPlaybackToken($video->cloudflare_uid, $expiresIn)['token'];
-        $base = $this->customerBaseUrl();
-        $iframeUrl = $base.'/'.rawurlencode($token).'/iframe';
-        $coverUrl = $this->coverUrl($video);
-
-        if ($coverUrl !== null) {
-            $iframeUrl .= '?poster='.rawurlencode($coverUrl);
+        if ($video->isEmbed()) {
+            return $this->embedPlayback($lesson, $video, $resumeAt);
         }
 
-        return [
-            'lesson_id' => (int) $lesson->id,
-            'duration_seconds' => $video->duration_seconds,
-            'cover_url' => $coverUrl,
-            'expires_in' => $expiresIn,
-            'playback' => [
-                'token' => $token,
-                'iframe_url' => $iframeUrl,
-                'hls_url' => $base.'/'.rawurlencode($token).'/manifest/video.m3u8',
-            ],
-        ];
+        return $this->cloudflarePlayback($lesson, $video, $resumeAt);
+    }
+
+    /**
+     * Save or replace a YouTube/Vimeo embed for the lesson.
+     *
+     * @return Video
+     */
+    public function upsertEmbed(Lesson $lesson, string $url, ?int $durationSeconds = null): Video
+    {
+        $parsed = $this->embeds->parse($url);
+
+        return DB::transaction(function () use ($lesson, $parsed, $durationSeconds) {
+            $current = Video::query()->where('lesson_id', $lesson->id)->lockForUpdate()->first();
+
+            $attributes = [
+                'provider' => $parsed['provider'],
+                'external_id' => $parsed['external_id'],
+                'embed_url' => $parsed['embed_url'],
+                'source_url' => $parsed['source_url'],
+                'cloudflare_uid' => null,
+                'status' => Video::READY,
+                'duration_seconds' => $durationSeconds !== null ? $this->duration($durationSeconds) : ($current?->duration_seconds),
+                'error_message' => null,
+            ];
+
+            try {
+                if ($current === null) {
+                    return Video::query()->create([
+                        'lesson_id' => $lesson->id,
+                        ...$attributes,
+                    ]);
+                }
+
+                $current->fill($attributes);
+                $current->save();
+
+                return $current;
+            } catch (UniqueConstraintViolationException) {
+                throw ValidationException::withMessages([
+                    'lesson_id' => ['This lesson already has a video.'],
+                ]);
+            }
+        });
     }
 
     public function storeCover(Lesson $lesson, UploadedFile $file): Video
@@ -76,7 +108,7 @@ class VideoService
 
         if ($video === null) {
             throw ValidationException::withMessages([
-                'cover' => ['Upload a video before setting a cover.'],
+                'cover' => ['Save a video before setting a cover.'],
             ]);
         }
 
@@ -121,14 +153,21 @@ class VideoService
         return url('storage/'.$video->cover_path);
     }
 
+    public function findForLesson(Lesson $lesson): ?Video
+    {
+        return Video::query()->where('lesson_id', $lesson->id)->first();
+    }
+
     /**
+     * Legacy Cloudflare direct upload (kept for old videos / optional use).
+     *
      * @return array{video: Video, upload_url: string}
      */
     public function createDirectUpload(Lesson $lesson): array
     {
         $existing = Video::query()->where('lesson_id', $lesson->id)->first();
 
-        if ($existing !== null && $existing->status !== Video::FAILED) {
+        if ($existing !== null && $existing->status !== Video::FAILED && ! $existing->isEmbed()) {
             throw ValidationException::withMessages([
                 'lesson_id' => ['This lesson already has a video.'],
             ]);
@@ -139,36 +178,34 @@ class VideoService
         $video = DB::transaction(function () use ($lesson, $created) {
             $current = Video::query()->where('lesson_id', $lesson->id)->lockForUpdate()->first();
 
-            if ($current !== null && $current->status !== Video::FAILED) {
+            if ($current !== null && $current->status !== Video::FAILED && ! $current->isEmbed()) {
                 throw ValidationException::withMessages([
                     'lesson_id' => ['This lesson already has a video.'],
                 ]);
             }
 
             $attributes = [
+                'provider' => Video::PROVIDER_CLOUDFLARE,
+                'external_id' => $created['uid'],
+                'embed_url' => null,
+                'source_url' => null,
                 'cloudflare_uid' => $created['uid'],
                 'status' => Video::UPLOADING,
                 'duration_seconds' => null,
                 'error_message' => null,
             ];
 
-            try {
-                if ($current === null) {
-                    return Video::query()->create([
-                        'lesson_id' => $lesson->id,
-                        ...$attributes,
-                    ]);
-                }
-
-                $current->fill($attributes);
-                $current->save();
-
-                return $current;
-            } catch (UniqueConstraintViolationException) {
-                throw ValidationException::withMessages([
-                    'lesson_id' => ['This lesson already has a video.'],
+            if ($current === null) {
+                return Video::query()->create([
+                    'lesson_id' => $lesson->id,
+                    ...$attributes,
                 ]);
             }
+
+            $current->fill($attributes);
+            $current->save();
+
+            return $current;
         });
 
         return [
@@ -177,14 +214,7 @@ class VideoService
         ];
     }
 
-    public function findForLesson(Lesson $lesson): ?Video
-    {
-        return Video::query()->where('lesson_id', $lesson->id)->first();
-    }
-
     /**
-     * Apply a verified Cloudflare Stream webhook payload.
-     *
      * @param  array<string, mixed>  $payload
      */
     public function applyCloudflareNotification(array $payload): ?Video
@@ -206,36 +236,19 @@ class VideoService
         $state = data_get($payload, 'status.state');
 
         if ($state === 'ready') {
-            return $this->applyReady($video, $payload);
+            $duration = $payload['duration'] ?? null;
+            $seconds = is_numeric($duration) ? (int) round((float) $duration) : (int) ($video->duration_seconds ?? 0);
+
+            return $this->markReady($video, $seconds);
         }
 
         if ($state === 'error') {
-            return $this->applyFailed($video, $payload);
+            $message = data_get($payload, 'status.errorReasonText')
+                ?: data_get($payload, 'status.errReasonText')
+                ?: 'Video processing failed.';
+
+            return $this->markFailed($video, is_string($message) ? $message : 'Video processing failed.');
         }
-
-        return $video;
-    }
-
-    public function markProcessing(Video $video, ?int $durationSeconds = null): Video
-    {
-        if ($video->status === Video::PROCESSING) {
-            if ($durationSeconds !== null) {
-                $video->duration_seconds = $this->duration($durationSeconds);
-                $video->save();
-            }
-
-            return $video;
-        }
-
-        $this->assertTransition($video, [Video::PENDING, Video::UPLOADING], Video::PROCESSING);
-        $video->status = Video::PROCESSING;
-        $video->error_message = null;
-
-        if ($durationSeconds !== null) {
-            $video->duration_seconds = $this->duration($durationSeconds);
-        }
-
-        $video->save();
 
         return $video;
     }
@@ -289,28 +302,66 @@ class VideoService
     }
 
     /**
-     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
      */
-    private function applyReady(Video $video, array $payload): Video
+    private function embedPlayback(Lesson $lesson, Video $video, int $resumeAt): array
     {
-        $duration = $payload['duration'] ?? null;
-        $seconds = is_numeric($duration) ? (int) round((float) $duration) : (int) ($video->duration_seconds ?? 0);
+        if (! is_string($video->external_id) || $video->external_id === '' || ! is_string($video->provider)) {
+            throw new HttpException(404, 'This lesson has no ready video.');
+        }
 
-        return $this->markReady($video, $seconds);
+        return [
+            'lesson_id' => (int) $lesson->id,
+            'duration_seconds' => $video->duration_seconds,
+            'cover_url' => $this->coverUrl($video),
+            'provider' => $video->provider,
+            'expires_in' => null,
+            'playback' => [
+                'token' => null,
+                'iframe_url' => $this->embeds->iframeUrl($video->provider, $video->external_id, $resumeAt),
+                'hls_url' => null,
+            ],
+        ];
     }
 
     /**
-     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
      */
-    private function applyFailed(Video $video, array $payload): Video
+    private function cloudflarePlayback(Lesson $lesson, Video $video, int $resumeAt): array
     {
-        $message = data_get($payload, 'status.errorReasonText')
-            ?: data_get($payload, 'status.errReasonText')
-            ?: data_get($payload, 'status.errorReasonCode')
-            ?: data_get($payload, 'status.errReasonCode')
-            ?: 'Video processing failed.';
+        if (! is_string($video->cloudflare_uid) || $video->cloudflare_uid === '') {
+            throw new HttpException(404, 'This lesson has no ready video.');
+        }
 
-        return $this->markFailed($video, is_string($message) ? $message : 'Video processing failed.');
+        $expiresIn = $this->playbackTtlSeconds();
+        $token = $this->cloudflare->createPlaybackToken($video->cloudflare_uid, $expiresIn)['token'];
+        $base = $this->customerBaseUrl();
+        $iframeUrl = $base.'/'.rawurlencode($token).'/iframe';
+        $coverUrl = $this->coverUrl($video);
+
+        $query = [];
+        if ($coverUrl !== null) {
+            $query['poster'] = $coverUrl;
+        }
+        if ($resumeAt > 0) {
+            $query['startTime'] = $resumeAt;
+        }
+        if ($query !== []) {
+            $iframeUrl .= '?'.http_build_query($query);
+        }
+
+        return [
+            'lesson_id' => (int) $lesson->id,
+            'duration_seconds' => $video->duration_seconds,
+            'cover_url' => $coverUrl,
+            'provider' => Video::PROVIDER_CLOUDFLARE,
+            'expires_in' => $expiresIn,
+            'playback' => [
+                'token' => $token,
+                'iframe_url' => $iframeUrl,
+                'hls_url' => $base.'/'.rawurlencode($token).'/manifest/video.m3u8',
+            ],
+        ];
     }
 
     private function hasActiveEnrollment(int $userId, int $courseId): bool

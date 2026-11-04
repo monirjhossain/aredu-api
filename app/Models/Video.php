@@ -17,8 +17,18 @@ class Video extends Model
 
     public const FAILED = 'failed';
 
+    public const PROVIDER_YOUTUBE = 'youtube';
+
+    public const PROVIDER_VIMEO = 'vimeo';
+
+    public const PROVIDER_CLOUDFLARE = 'cloudflare';
+
     protected $fillable = [
         'lesson_id',
+        'provider',
+        'external_id',
+        'embed_url',
+        'source_url',
         'cloudflare_uid',
         'status',
         'duration_seconds',
@@ -29,5 +39,10 @@ class Video extends Model
     public function lesson(): BelongsTo
     {
         return $this->belongsTo(Lesson::class);
+    }
+
+    public function isEmbed(): bool
+    {
+        return in_array($this->provider, [self::PROVIDER_YOUTUBE, self::PROVIDER_VIMEO], true);
     }
 }

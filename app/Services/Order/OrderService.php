@@ -9,6 +9,7 @@ use App\Models\Enrollment;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
+use App\Services\Activity\ActivityLogService;
 use App\Services\Settings\SettingService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,7 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
-    public function __construct(private readonly SettingService $settings) {}
+    public function __construct(
+        private readonly SettingService $settings,
+        private readonly ActivityLogService $activity,
+    ) {}
 
     /**
      * @param  list<int>  $courseIds
@@ -97,7 +101,16 @@ class OrderService
                 ]);
             }
 
-            return $this->findOwned($user, $order->id);
+            $owned = $this->findOwned($user, $order->id);
+
+            $this->activity->record(
+                $user,
+                'order.created',
+                $owned,
+                'Order '.$owned->order_number.' created for '.$owned->total.' '.$owned->currency.'.',
+            );
+
+            return $owned;
         });
     }
 
@@ -108,6 +121,52 @@ class OrderService
             ->where('user_id', $user->id)
             ->orderByDesc('id')
             ->paginate(12);
+    }
+
+    /**
+     * @param  array{status?: string|null, search?: string|null, per_page?: int|null}  $filters
+     */
+    public function paginateForAdmin(array $filters = []): LengthAwarePaginator
+    {
+        $status = isset($filters['status']) && is_string($filters['status']) ? trim($filters['status']) : '';
+        $search = isset($filters['search']) && is_string($filters['search']) ? trim($filters['search']) : '';
+        $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
+        $perPage = max(5, min($perPage, 50));
+
+        $allowedStatuses = [
+            Order::PENDING,
+            Order::PAID,
+            Order::FAILED,
+            Order::CANCELLED,
+            Order::REFUNDED,
+        ];
+
+        return Order::query()
+            ->with([
+                'user:id,name,email,phone',
+                'items.course:id,title,slug',
+                'payments',
+            ])
+            ->when(
+                $status !== '' && in_array($status, $allowedStatuses, true),
+                fn ($query) => $query->where('status', $status),
+            )
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%'.$search.'%';
+                $query->where(function ($inner) use ($like) {
+                    $inner->where('order_number', 'like', $like)
+                        ->orWhereHas('user', function ($userQuery) use ($like) {
+                            $userQuery->where('name', 'like', $like)
+                                ->orWhere('email', 'like', $like)
+                                ->orWhere('phone', 'like', $like);
+                        })
+                        ->orWhereHas('items.course', function ($courseQuery) use ($like) {
+                            $courseQuery->where('title', 'like', $like);
+                        });
+                });
+            })
+            ->orderByDesc('id')
+            ->paginate($perPage);
     }
 
     public function findOwned(User $user, int $orderId): Order

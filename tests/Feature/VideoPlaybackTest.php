@@ -13,7 +13,6 @@ use App\Models\Video;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class VideoPlaybackTest extends TestCase
@@ -54,20 +53,14 @@ class VideoPlaybackTest extends TestCase
 
         Auth::forgetGuards();
 
-        Http::fake(function () {
-            return Http::response([
-                'success' => true,
-                'result' => ['token' => 'signed-preview-token'],
-            ]);
-        });
-
         $this->withToken($student->createToken('api')->plainTextToken)
             ->getJson('/api/v1/lessons/'.$preview->id.'/playback')
             ->assertOk()
             ->assertJsonPath('data.lesson_id', $preview->id)
-            ->assertJsonPath('data.expires_in', 900)
-            ->assertJsonPath('data.playback.token', 'signed-preview-token')
-            ->assertJsonPath('data.playback.iframe_url', 'https://customer-demo123.cloudflarestream.com/signed-preview-token/iframe')
+            ->assertJsonPath('data.provider', 'youtube')
+            ->assertJsonPath('data.expires_in', null)
+            ->assertJsonPath('data.playback.token', null)
+            ->assertJsonPath('data.playback.iframe_url', 'https://www.youtube.com/embed/uid-preview?rel=0&modestbranding=1&playsinline=1')
             ->assertJsonMissingPath('data.cloudflare_uid')
             ->assertJsonMissingPath('data.playback.cloudflare_uid');
 
@@ -101,26 +94,13 @@ class VideoPlaybackTest extends TestCase
 
         Auth::forgetGuards();
 
-        Http::fake(function () {
-            return Http::response([
-                'success' => true,
-                'result' => ['token' => 'signed-enrolled-token'],
-            ]);
-        });
-
         $this->withToken($token)
             ->getJson('/api/v1/lessons/'.$lesson->id.'/playback')
             ->assertOk()
-            ->assertJsonPath('data.playback.token', 'signed-enrolled-token')
-            ->assertJsonPath('data.playback.hls_url', 'https://customer-demo123.cloudflarestream.com/signed-enrolled-token/manifest/video.m3u8');
-
-        Http::assertSent(function ($request) {
-            $data = $request->data();
-
-            return $request->method() === 'POST'
-                && str_contains($request->url(), '/stream/video-uid-ready/token')
-                && (int) ($data['exp'] ?? 0) >= time() + 800;
-        });
+            ->assertJsonPath('data.provider', 'youtube')
+            ->assertJsonPath('data.playback.token', null)
+            ->assertJsonPath('data.playback.hls_url', null)
+            ->assertJsonPath('data.playback.iframe_url', 'https://www.youtube.com/embed/video-uid-ready?rel=0&modestbranding=1&playsinline=1');
 
         Auth::forgetGuards();
 
@@ -144,8 +124,6 @@ class VideoPlaybackTest extends TestCase
         ]);
 
         Video::query()->where('lesson_id', $lesson->id)->update(['status' => Video::PROCESSING]);
-
-        Http::fake();
 
         $this->withToken($student->createToken('api')->plainTextToken)
             ->getJson('/api/v1/lessons/'.$lesson->id.'/playback')
@@ -190,7 +168,10 @@ class VideoPlaybackTest extends TestCase
 
         Video::query()->create([
             'lesson_id' => $lesson->id,
-            'cloudflare_uid' => $uid,
+            'provider' => Video::PROVIDER_YOUTUBE,
+            'external_id' => $uid,
+            'embed_url' => 'https://www.youtube.com/embed/'.$uid,
+            'source_url' => 'https://www.youtube.com/watch?v='.$uid,
             'status' => Video::READY,
             'duration_seconds' => 120,
         ]);
