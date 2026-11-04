@@ -69,6 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [ProfileController::class, 'me']);
     Route::get('/user', [ProfileController::class, 'me']);
     Route::put('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar']);
+    Route::delete('/profile/avatar', [ProfileController::class, 'deleteAvatar']);
     Route::put('/password', [ProfileController::class, 'changePassword']);
 
     Route::get('/lessons/{lesson}/playback', LessonPlaybackController::class)->whereNumber('lesson');

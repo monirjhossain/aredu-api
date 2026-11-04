@@ -28,6 +28,7 @@ class User extends Authenticatable
         'password',
         'phone',
         'locale',
+        'avatar_path',
         'is_active',
     ];
 

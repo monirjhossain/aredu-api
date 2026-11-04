@@ -18,6 +18,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'locale' => $this->locale,
+            'avatar_url' => $this->avatar_path ? url('storage/'.$this->avatar_path) : null,
             'is_active' => (bool) ($this->is_active ?? true),
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'roles' => $this->whenLoaded('roles', fn () => $this->roles->pluck('slug')->values()),

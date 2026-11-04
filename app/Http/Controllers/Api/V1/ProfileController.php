@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ChangePasswordRequest;
+use App\Http\Requests\Auth\UpdateAvatarRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Http\Responses\ApiResponse;
@@ -30,6 +31,26 @@ class ProfileController extends Controller
         return ApiResponse::success(
             UserResource::make($user)->resolve(),
             'Profile updated.',
+        );
+    }
+
+    public function updateAvatar(UpdateAvatarRequest $request): JsonResponse
+    {
+        $user = $this->auth->updateAvatar($request->user(), $request->file('avatar'));
+
+        return ApiResponse::success(
+            UserResource::make($user)->resolve(),
+            'Avatar updated.',
+        );
+    }
+
+    public function deleteAvatar(Request $request): JsonResponse
+    {
+        $user = $this->auth->deleteAvatar($request->user());
+
+        return ApiResponse::success(
+            UserResource::make($user)->resolve(),
+            'Avatar removed.',
         );
     }
 

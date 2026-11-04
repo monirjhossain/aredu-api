@@ -6,9 +6,11 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\Activity\ActivityLogService;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
@@ -92,6 +94,32 @@ class AuthService
             'phone' => $data['phone'] ?? null,
             'locale' => $data['locale'],
         ])->save();
+
+        return $user->refresh()->load('roles.permissions');
+    }
+
+    public function updateAvatar(User $user, UploadedFile $file): User
+    {
+        $path = $file->store('avatars', 'public');
+        $previous = $user->avatar_path;
+        $user->avatar_path = $path;
+        $user->save();
+
+        if (is_string($previous) && $previous !== '') {
+            Storage::disk('public')->delete($previous);
+        }
+
+        return $user->refresh()->load('roles.permissions');
+    }
+
+    public function deleteAvatar(User $user): User
+    {
+        if (is_string($user->avatar_path) && $user->avatar_path !== '') {
+            Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        $user->avatar_path = null;
+        $user->save();
 
         return $user->refresh()->load('roles.permissions');
     }

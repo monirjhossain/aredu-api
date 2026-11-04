@@ -208,6 +208,7 @@ class StudentDashboardService
             ->get()
             ->map(fn (WritingSubmission $submission) => [
                 'id' => $submission->id,
+                'task_id' => $submission->writing_task_id,
                 'title' => $submission->task?->title,
                 'submitted_at' => $submission->submitted_at?->toIso8601String(),
             ])
@@ -234,6 +235,7 @@ class StudentDashboardService
             ->get()
             ->map(fn (SpeakingRecording $recording) => [
                 'id' => $recording->id,
+                'task_id' => $recording->speaking_task_id,
                 'title' => $recording->task?->title,
                 'submitted_at' => $recording->submitted_at?->toIso8601String(),
             ])
