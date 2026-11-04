@@ -22,7 +22,17 @@ class EnrollmentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $page = $this->enrollments->paginateForStudent($request->user());
+        $user = $request->user();
+        $page = $this->enrollments->paginateForStudent($user);
+
+        $page->getCollection()->transform(function ($enrollment) use ($user) {
+            $enrollment->setAttribute(
+                'progress_stats',
+                $this->progress->courseProgress($user, (int) $enrollment->course_id),
+            );
+
+            return $enrollment;
+        });
 
         return ApiResponse::success(
             EnrollmentResource::collection($page)->resolve(),

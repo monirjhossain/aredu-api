@@ -5,7 +5,6 @@ namespace App\Services\Landing;
 use App\Models\Course;
 use App\Models\Lesson;
 use App\Services\Settings\SettingService;
-use Illuminate\Support\Facades\Storage;
 
 class LandingService
 {
@@ -88,7 +87,7 @@ class LandingService
                     'course_title' => $course?->title,
                     'course_slug' => $course?->slug,
                     'cover_url' => $cover
-                        ? Storage::disk('public')->url($cover)
+                        ? url('storage/'.ltrim($cover, '/'))
                         : ($course?->thumbnail_path ? url('storage/'.$course->thumbnail_path) : null),
                     'video_ready' => $lesson->video?->status === 'ready',
                 ];

@@ -344,7 +344,8 @@ class SettingService
             return null;
         }
 
-        return Storage::disk('public')->url($path);
+        // Always absolute against APP_URL so Vite (different origin) can load the image.
+        return url('storage/'.ltrim($path, '/'));
     }
 
     /**

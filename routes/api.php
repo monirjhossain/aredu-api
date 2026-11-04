@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\PublicCourseController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\UserRoleController;
 use App\Http\Controllers\Api\V1\LessonPlaybackController;
+use App\Http\Controllers\Api\V1\LessonEngagementController;
 use App\Http\Controllers\Api\V1\LessonProgressController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\AdminOrderController;
@@ -70,6 +71,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/lessons/{lesson}/playback', LessonPlaybackController::class)->whereNumber('lesson');
     Route::put('/lessons/{lesson}/progress', [LessonProgressController::class, 'update'])->whereNumber('lesson');
     Route::post('/lessons/{lesson}/progress/complete', [LessonProgressController::class, 'complete'])->whereNumber('lesson');
+    Route::post('/lessons/{lesson}/reaction', [LessonEngagementController::class, 'react'])->whereNumber('lesson');
+    Route::post('/lessons/{lesson}/feedback', [LessonEngagementController::class, 'feedback'])->whereNumber('lesson');
 
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store']);
