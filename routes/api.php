@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\LessonProgressController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AdminPaymentController;
+use App\Http\Controllers\Api\V1\AdminStudentController;
 use App\Http\Controllers\Api\V1\BkashPaymentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\SslCommerzPaymentController;
@@ -197,6 +198,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('permission:payments.manage')->group(function () {
         Route::get('/admin/orders', [AdminOrderController::class, 'index']);
+        Route::get('/admin/orders/{order}', [AdminOrderController::class, 'show'])->whereNumber('order');
+        Route::post('/admin/orders/{order}/cancel', [AdminOrderController::class, 'cancel'])->whereNumber('order');
         Route::get('/admin/payments', [AdminPaymentController::class, 'index']);
         Route::get('/admin/payments/pending-orders', [AdminPaymentController::class, 'pendingOrders']);
         Route::post('/admin/orders/{order}/confirm-bkash', [AdminPaymentController::class, 'confirmBkash'])->whereNumber('order');
@@ -306,5 +309,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('permission:users.manage')->group(function () {
         Route::get('/admin/users', [UserRoleController::class, 'index']);
         Route::put('/admin/users/{user}/roles', [UserRoleController::class, 'sync']);
+        Route::get('/admin/students', [AdminStudentController::class, 'index']);
+        Route::get('/admin/students/{student}', [AdminStudentController::class, 'show'])->whereNumber('student');
     });
 });

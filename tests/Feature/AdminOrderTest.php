@@ -41,6 +41,39 @@ class AdminOrderTest extends TestCase
             ->assertJsonPath('data.0.items.0.course_title', 'Writing');
     }
 
+    public function test_admin_can_filter_orders_by_gateway_and_date(): void
+    {
+        $admin = $this->userWithRole('super_admin');
+        $student = $this->userWithRole('student');
+        $order = $this->pendingOrder($student, '1200.00', 'writing');
+        Payment::query()->create([
+            'order_id' => $order->id,
+            'gateway' => Payment::GATEWAY_BKASH,
+            'status' => Payment::PAID,
+            'amount' => '1200.00',
+            'currency' => 'BDT',
+            'gateway_transaction_id' => 'manual-1',
+            'gateway_reference' => 'TRX-1',
+        ]);
+        $order->update(['status' => Order::PAID]);
+
+        $other = $this->pendingOrder($student, '900.00', 'speaking');
+        Payment::query()->create([
+            'order_id' => $other->id,
+            'gateway' => Payment::GATEWAY_SSLCOMMERZ,
+            'status' => Payment::INITIATED,
+            'amount' => '900.00',
+            'currency' => 'BDT',
+            'gateway_transaction_id' => 'ssl-1',
+        ]);
+
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->getJson('/api/v1/admin/orders?gateway=bkash&date_from='.now()->toDateString())
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $order->id);
+    }
+
     public function test_student_purchase_creates_order_activity_log(): void
     {
         $student = $this->userWithRole('student');
@@ -75,6 +108,42 @@ class AdminOrderTest extends TestCase
         $this->assertSame(Order::PAID, $order->fresh()->status);
         $this->assertSame(1, Enrollment::query()->where('user_id', $student->id)->where('status', 'active')->count());
         $this->assertSame(1, Payment::query()->where('order_id', $order->id)->where('status', Payment::PAID)->count());
+    }
+
+    public function test_admin_can_show_and_cancel_pending_order(): void
+    {
+        $admin = $this->userWithRole('super_admin');
+        $student = $this->userWithRole('student');
+        $order = $this->pendingOrder($student, '1100.00', 'grammar');
+
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->getJson('/api/v1/admin/orders/'.$order->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $order->id)
+            ->assertJsonPath('data.user.email', $student->email);
+
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->postJson('/api/v1/admin/orders/'.$order->id.'/cancel')
+            ->assertOk()
+            ->assertJsonPath('data.status', Order::CANCELLED);
+
+        $this->assertSame(Order::CANCELLED, $order->fresh()->status);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $admin->id,
+            'action' => 'order.cancelled',
+        ]);
+    }
+
+    public function test_admin_cannot_cancel_paid_order(): void
+    {
+        $admin = $this->userWithRole('super_admin');
+        $student = $this->userWithRole('student');
+        $order = $this->pendingOrder($student, '1100.00', 'vocab');
+        $order->update(['status' => Order::PAID]);
+
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->postJson('/api/v1/admin/orders/'.$order->id.'/cancel')
+            ->assertStatus(422);
     }
 
     public function test_student_cannot_list_admin_orders(): void

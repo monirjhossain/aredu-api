@@ -124,12 +124,22 @@ class OrderService
     }
 
     /**
-     * @param  array{status?: string|null, search?: string|null, per_page?: int|null}  $filters
+     * @param  array{
+     *   status?: string|null,
+     *   search?: string|null,
+     *   gateway?: string|null,
+     *   date_from?: string|null,
+     *   date_to?: string|null,
+     *   per_page?: int|null
+     * }  $filters
      */
     public function paginateForAdmin(array $filters = []): LengthAwarePaginator
     {
         $status = isset($filters['status']) && is_string($filters['status']) ? trim($filters['status']) : '';
         $search = isset($filters['search']) && is_string($filters['search']) ? trim($filters['search']) : '';
+        $gateway = isset($filters['gateway']) && is_string($filters['gateway']) ? trim($filters['gateway']) : '';
+        $dateFrom = isset($filters['date_from']) && is_string($filters['date_from']) ? trim($filters['date_from']) : '';
+        $dateTo = isset($filters['date_to']) && is_string($filters['date_to']) ? trim($filters['date_to']) : '';
         $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
         $perPage = max(5, min($perPage, 50));
 
@@ -141,6 +151,8 @@ class OrderService
             Order::REFUNDED,
         ];
 
+        $allowedGateways = ['bkash', 'sslcommerz'];
+
         return Order::query()
             ->with([
                 'user:id,name,email,phone',
@@ -151,6 +163,24 @@ class OrderService
                 $status !== '' && in_array($status, $allowedStatuses, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->when(
+                $gateway !== '' && in_array($gateway, $allowedGateways, true),
+                fn ($query) => $query->whereHas('payments', fn ($paymentQuery) => $paymentQuery->where('gateway', $gateway)),
+            )
+            ->when($dateFrom !== '', function ($query) use ($dateFrom) {
+                try {
+                    $query->whereDate('created_at', '>=', $dateFrom);
+                } catch (\Throwable) {
+                    // Ignore invalid date input.
+                }
+            })
+            ->when($dateTo !== '', function ($query) use ($dateTo) {
+                try {
+                    $query->whereDate('created_at', '<=', $dateTo);
+                } catch (\Throwable) {
+                    // Ignore invalid date input.
+                }
+            })
             ->when($search !== '', function ($query) use ($search) {
                 $like = '%'.$search.'%';
                 $query->where(function ($inner) use ($like) {
@@ -182,6 +212,45 @@ class OrderService
         }
 
         return $order;
+    }
+
+    public function findForAdmin(int $orderId): Order
+    {
+        $order = Order::query()
+            ->with([
+                'user:id,name,email,phone',
+                'items.course:id,title,slug',
+                'payments',
+            ])
+            ->whereKey($orderId)
+            ->first();
+
+        if ($order === null) {
+            throw new AuthorizationException('This order is not available.');
+        }
+
+        return $order;
+    }
+
+    public function cancelForAdmin(User $admin, Order $order): Order
+    {
+        if (! in_array($order->status, [Order::PENDING, Order::FAILED], true)) {
+            throw ValidationException::withMessages([
+                'order' => ['Only pending or failed orders can be cancelled.'],
+            ]);
+        }
+
+        $order->status = Order::CANCELLED;
+        $order->save();
+
+        $this->activity->record(
+            $admin,
+            'order.cancelled',
+            $order,
+            'Admin cancelled order '.$order->order_number.'.',
+        );
+
+        return $this->findForAdmin($order->id);
     }
 
     /**
