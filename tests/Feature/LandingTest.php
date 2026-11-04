@@ -25,6 +25,12 @@ class LandingTest extends TestCase
             'slug' => 'academic-starter',
             'exam_type' => 'academic',
             'price' => 1500,
+            'discount_price' => 999,
+            'learners_count' => 120,
+            'batch_number' => 3,
+            'seats_left' => 15,
+            'class_starts_on' => now()->addDays(5)->toDateString(),
+            'offer_ends_on' => now()->addDays(2)->toDateString(),
             'is_published' => true,
         ]);
 
@@ -54,9 +60,15 @@ class LandingTest extends TestCase
             ->assertJsonPath('data.branding.platform_name', 'AR Education')
             ->assertJsonPath('data.about', 'Company about for landing.')
             ->assertJsonPath('data.videos.0.title', 'Intro')
-            ->assertJsonPath('data.courses.0.title', 'Academic Starter');
+            ->assertJsonPath('data.courses.0.title', 'Academic Starter')
+            ->assertJsonPath('data.courses.0.learners_count', 120)
+            ->assertJsonPath('data.courses.0.batch_number', 3)
+            ->assertJsonPath('data.courses.0.seats_left', 15)
+            ->assertJsonPath('data.courses.0.discount_price', '999.00');
 
         $titles = collect($response->json('data.courses'))->pluck('title')->all();
         $this->assertSame(['Academic Starter'], $titles);
+        $this->assertNotNull($response->json('data.courses.0.offer_days_left'));
+        $this->assertNotNull($response->json('data.courses.0.class_starts_on'));
     }
 }

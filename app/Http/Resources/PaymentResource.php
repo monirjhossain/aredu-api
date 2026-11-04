@@ -24,6 +24,18 @@ class PaymentResource extends JsonResource
             'gateway_transaction_id' => $this->gateway_transaction_id,
             'gateway_reference' => $this->when($canManagePayments, $this->gateway_reference),
             'created_at' => optional($this->created_at)?->toIso8601String(),
+            'updated_at' => optional($this->updated_at)?->toIso8601String(),
+            'order' => $this->whenLoaded('order', fn () => $this->order ? [
+                'id' => $this->order->id,
+                'order_number' => $this->order->order_number,
+                'status' => $this->order->status,
+                'user' => $this->order->relationLoaded('user') && $this->order->user ? [
+                    'id' => $this->order->user->id,
+                    'name' => $this->order->user->name,
+                    'email' => $this->order->user->email,
+                    'phone' => $this->order->user->phone,
+                ] : null,
+            ] : null),
         ];
     }
 }

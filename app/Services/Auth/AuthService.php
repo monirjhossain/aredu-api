@@ -62,6 +62,12 @@ class AuthService
             throw new AuthenticationException('These credentials do not match our records.');
         }
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been deactivated. Contact support.'],
+            ]);
+        }
+
         $this->activity->record($user, 'user.login', $user, 'User logged in.');
 
         return $this->tokenPayload($user);

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Course;
 use App\Models\CourseCategory;
+use App\Models\Expense;
 use App\Models\MockTest;
 use App\Models\Payment;
 use App\Models\Permission;
@@ -15,6 +16,7 @@ use App\Models\WritingTask;
 use App\Policies\CourseCategoryPolicy;
 use App\Policies\CoursePolicy;
 use App\Policies\DashboardPolicy;
+use App\Policies\ExpensePolicy;
 use App\Policies\MockTestPolicy;
 use App\Policies\PaymentPolicy;
 use App\Policies\PermissionPolicy;
@@ -52,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Video::class, VideoPolicy::class);
         Gate::policy(Payment::class, PaymentPolicy::class);
+        Gate::policy(Expense::class, ExpensePolicy::class);
         Gate::policy(MockTest::class, MockTestPolicy::class);
         Gate::policy(WritingTask::class, WritingTaskPolicy::class);
         Gate::policy(SpeakingTask::class, SpeakingTaskPolicy::class);

@@ -18,6 +18,8 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'locale' => $this->locale,
+            'is_active' => (bool) ($this->is_active ?? true),
+            'created_at' => optional($this->created_at)?->toIso8601String(),
             'roles' => $this->whenLoaded('roles', fn () => $this->roles->pluck('slug')->values()),
             'permissions' => $this->whenLoaded('roles', function () {
                 return $this->roles

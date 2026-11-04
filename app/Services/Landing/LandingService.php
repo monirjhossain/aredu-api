@@ -2,6 +2,7 @@
 
 namespace App\Services\Landing;
 
+use App\Http\Resources\PublicCourseResource;
 use App\Models\Course;
 use App\Models\Lesson;
 use App\Services\Settings\SettingService;
@@ -33,29 +34,14 @@ class LandingService
      */
     private function featuredCourses(): array
     {
-        return Course::query()
+        $courses = Course::query()
             ->with(['category:id,name'])
             ->where('is_published', true)
             ->orderByDesc('id')
             ->limit(6)
-            ->get()
-            ->map(fn (Course $course) => [
-                'id' => $course->id,
-                'title' => $course->title,
-                'slug' => $course->slug,
-                'exam_type' => $course->exam_type,
-                'price' => $course->price,
-                'discount_price' => $course->discount_price,
-                'duration_minutes' => $course->duration_minutes,
-                'thumbnail_url' => $course->thumbnail_path
-                    ? url('storage/'.$course->thumbnail_path)
-                    : null,
-                'category' => $course->category ? [
-                    'id' => $course->category->id,
-                    'name' => $course->category->name,
-                ] : null,
-            ])
-            ->all();
+            ->get();
+
+        return PublicCourseResource::collection($courses)->resolve();
     }
 
     /**

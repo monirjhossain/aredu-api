@@ -21,6 +21,8 @@ use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AdminPaymentController;
 use App\Http\Controllers\Api\V1\AdminStudentController;
+use App\Http\Controllers\Api\V1\AdminAccountController;
+use App\Http\Controllers\Api\V1\AdminFinanceController;
 use App\Http\Controllers\Api\V1\BkashPaymentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\SslCommerzPaymentController;
@@ -204,6 +206,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/payments/pending-orders', [AdminPaymentController::class, 'pendingOrders']);
         Route::post('/admin/orders/{order}/confirm-bkash', [AdminPaymentController::class, 'confirmBkash'])->whereNumber('order');
         Route::post('/admin/payments/{payment}/refund', [EnrollmentController::class, 'refund'])->whereNumber('payment');
+
+        Route::get('/admin/finance/summary', [AdminFinanceController::class, 'summary']);
+        Route::get('/admin/finance/income', [AdminFinanceController::class, 'income']);
+        Route::get('/admin/finance/expenses', [AdminFinanceController::class, 'expenses']);
+        Route::post('/admin/finance/expenses', [AdminFinanceController::class, 'storeExpense']);
+        Route::put('/admin/finance/expenses/{expense}', [AdminFinanceController::class, 'updateExpense'])->whereNumber('expense');
+        Route::delete('/admin/finance/expenses/{expense}', [AdminFinanceController::class, 'destroyExpense'])->whereNumber('expense');
     });
 
     Route::middleware('permission:mock_tests.manage')->group(function () {
@@ -309,6 +318,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('permission:users.manage')->group(function () {
         Route::get('/admin/users', [UserRoleController::class, 'index']);
         Route::put('/admin/users/{user}/roles', [UserRoleController::class, 'sync']);
+        Route::get('/admin/accounts', [AdminAccountController::class, 'index']);
+        Route::post('/admin/accounts', [AdminAccountController::class, 'store']);
+        Route::get('/admin/accounts/{account}', [AdminAccountController::class, 'show'])->whereNumber('account');
+        Route::put('/admin/accounts/{account}', [AdminAccountController::class, 'update'])->whereNumber('account');
+        Route::post('/admin/accounts/{account}/active', [AdminAccountController::class, 'setActive'])->whereNumber('account');
+        Route::post('/admin/accounts/{account}/reset-password', [AdminAccountController::class, 'resetPassword'])->whereNumber('account');
         Route::get('/admin/students', [AdminStudentController::class, 'index']);
         Route::get('/admin/students/{student}', [AdminStudentController::class, 'show'])->whereNumber('student');
     });
