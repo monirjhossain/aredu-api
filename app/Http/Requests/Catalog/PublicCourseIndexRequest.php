@@ -25,7 +25,17 @@ class PublicCourseIndexRequest extends FormRequest
                 'integer',
                 Rule::exists('course_categories', 'id')->whereNull('deleted_at'),
             ],
+            'free' => ['nullable', 'boolean'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('free')) {
+            $this->merge([
+                'free' => filter_var($this->input('free'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+            ]);
+        }
     }
 }

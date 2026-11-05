@@ -33,6 +33,11 @@ class UpdateSettingRequest extends FormRequest
             'notify_on_evaluation' => ['required', 'boolean'],
             'notify_on_mock_result' => ['required', 'boolean'],
             'notify_on_new_lesson' => ['required', 'boolean'],
+            'site_popup_enabled' => ['required', 'boolean'],
+            'site_popup_title' => ['nullable', 'string', 'max:160'],
+            'site_popup_body' => ['nullable', 'string', 'max:2000'],
+            'site_popup_cta_label' => ['nullable', 'string', 'max:80'],
+            'site_popup_cta_url' => ['nullable', 'string', 'max:500'],
         ];
     }
 }

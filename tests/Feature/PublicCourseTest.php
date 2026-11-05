@@ -130,6 +130,21 @@ class PublicCourseTest extends TestCase
             ->assertJsonPath('data.is_enrolled', true);
     }
 
+    public function test_public_catalog_can_filter_free_courses(): void
+    {
+        $category = $this->category();
+        $this->course($category, 'Paid Path', 'paid-path', 'academic', true, 2000, 1500);
+        $this->course($category, 'Zero Price', 'zero-price', 'academic', true, 0, null);
+        $this->course($category, 'Free Discount', 'free-discount', 'general', true, 1200, 0);
+
+        $this->getJson('/api/v1/courses?free=1')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonFragment(['slug' => 'zero-price'])
+            ->assertJsonFragment(['slug' => 'free-discount'])
+            ->assertJsonMissing(['slug' => 'paid-path']);
+    }
+
     private function category(string $name = 'Academic IELTS', string $slug = 'academic'): CourseCategory
     {
         return CourseCategory::query()->create(['name' => $name, 'slug' => $slug]);

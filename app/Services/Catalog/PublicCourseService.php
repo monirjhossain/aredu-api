@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 class PublicCourseService
 {
     /**
-     * @param  array{search?: string|null, exam_type?: string|null, category_id?: int|null}  $filters
+     * @param  array{search?: string|null, exam_type?: string|null, category_id?: int|null, free?: bool|null}  $filters
      */
     public function paginate(array $filters, ?User $viewer): LengthAwarePaginator
     {
@@ -32,6 +32,10 @@ class PublicCourseService
             })
             ->when(($filters['category_id'] ?? null) !== null && $filters['category_id'] !== '', function ($query) use ($filters) {
                 $query->where('category_id', $filters['category_id']);
+            })
+            ->when(! empty($filters['free']), function ($query) {
+                // Selling price: discount_price when set, otherwise price.
+                $query->whereRaw('COALESCE(discount_price, price) <= 0');
             })
             ->orderBy('title')
             ->orderBy('id')

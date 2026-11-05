@@ -11,6 +11,7 @@ use App\Services\Activity\ActivityLogService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -81,6 +82,8 @@ class CourseService
             'Course created: '.$course->title,
         );
 
+        $this->bumpPublicCache();
+
         return $this->find($course);
     }
 
@@ -98,6 +101,8 @@ class CourseService
             'Course updated: '.$course->title,
         );
 
+        $this->bumpPublicCache();
+
         return $this->find($course);
     }
 
@@ -112,6 +117,8 @@ class CourseService
             $course,
             ($published ? 'Course published: ' : 'Course unpublished: ').$course->title,
         );
+
+        $this->bumpPublicCache();
 
         return $this->find($course);
     }
@@ -183,6 +190,13 @@ class CourseService
 
             $course->delete();
         });
+
+        $this->bumpPublicCache();
+    }
+
+    private function bumpPublicCache(): void
+    {
+        Cache::forget('landing.public.v1');
     }
 
     private function term(?string $search): ?string

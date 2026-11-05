@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\Activity\ActivityLogService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class SettingService
@@ -40,6 +41,16 @@ class SettingService
 
     public const KEY_BKASH_PAYMENT_NOTE = 'bkash_payment_note';
 
+    public const KEY_SITE_POPUP_ENABLED = 'site_popup_enabled';
+
+    public const KEY_SITE_POPUP_TITLE = 'site_popup_title';
+
+    public const KEY_SITE_POPUP_BODY = 'site_popup_body';
+
+    public const KEY_SITE_POPUP_CTA_LABEL = 'site_popup_cta_label';
+
+    public const KEY_SITE_POPUP_CTA_URL = 'site_popup_cta_url';
+
     public const DEFAULTS = [
         self::KEY_PLATFORM_NAME => 'AR Education IELTS',
         self::KEY_LOGO_PATH => null,
@@ -56,19 +67,54 @@ class SettingService
         self::KEY_BKASH_QR_PATH => null,
         self::KEY_BKASH_MERCHANT_NUMBER => '',
         self::KEY_BKASH_PAYMENT_NOTE => 'Open bKash, scan this QR, send the exact order amount, then wait for admin confirmation.',
+        self::KEY_SITE_POPUP_ENABLED => '0',
+        self::KEY_SITE_POPUP_TITLE => 'Welcome to AR Education',
+        self::KEY_SITE_POPUP_BODY => 'Explore free courses, timed mocks, and structured IELTS paths — start learning today.',
+        self::KEY_SITE_POPUP_CTA_LABEL => 'Browse courses',
+        self::KEY_SITE_POPUP_CTA_URL => '/courses',
     ];
 
     public function __construct(private readonly ActivityLogService $activity) {}
 
     public function get(string $key, mixed $default = null): mixed
     {
-        $row = Setting::query()->where('key', $key)->first();
+        $values = $this->values([$key]);
 
-        if ($row === null) {
+        if (! array_key_exists($key, $values)) {
             return array_key_exists($key, self::DEFAULTS) ? self::DEFAULTS[$key] : $default;
         }
 
-        return $row->value;
+        return $values[$key];
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return array<string, mixed>
+     */
+    public function values(array $keys): array
+    {
+        $keys = array_values(array_unique($keys));
+        if ($keys === []) {
+            return [];
+        }
+
+        $rows = Setting::query()
+            ->whereIn('key', $keys)
+            ->pluck('value', 'key')
+            ->all();
+
+        $out = [];
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $rows)) {
+                $out[$key] = $rows[$key];
+                continue;
+            }
+            if (array_key_exists($key, self::DEFAULTS)) {
+                $out[$key] = self::DEFAULTS[$key];
+            }
+        }
+
+        return $out;
     }
 
     public function currency(): string
@@ -101,17 +147,37 @@ class SettingService
      */
     public function publicBranding(): array
     {
-        $logoPath = $this->get(self::KEY_LOGO_PATH);
+        $values = $this->values([
+            self::KEY_PLATFORM_NAME,
+            self::KEY_LOGO_PATH,
+            self::KEY_CONTACT_INFORMATION,
+            self::KEY_SUPPORT_EMAIL,
+            self::KEY_CURRENCY,
+            self::KEY_ABOUT_TEXT,
+            self::KEY_LANDING_VIDEOS,
+            self::KEY_BKASH_QR_PATH,
+            self::KEY_BKASH_MERCHANT_NUMBER,
+            self::KEY_BKASH_PAYMENT_NOTE,
+            self::KEY_SITE_POPUP_ENABLED,
+            self::KEY_SITE_POPUP_TITLE,
+            self::KEY_SITE_POPUP_BODY,
+            self::KEY_SITE_POPUP_CTA_LABEL,
+            self::KEY_SITE_POPUP_CTA_URL,
+        ]);
+
+        $logoPath = $values[self::KEY_LOGO_PATH] ?? null;
+        $currency = (string) ($values[self::KEY_CURRENCY] ?? 'BDT');
 
         return [
-            'platform_name' => (string) $this->get(self::KEY_PLATFORM_NAME),
+            'platform_name' => (string) ($values[self::KEY_PLATFORM_NAME] ?? self::DEFAULTS[self::KEY_PLATFORM_NAME]),
             'logo_url' => $this->logoUrl(is_string($logoPath) ? $logoPath : null),
-            'contact_information' => (string) $this->get(self::KEY_CONTACT_INFORMATION),
-            'support_email' => (string) $this->get(self::KEY_SUPPORT_EMAIL),
-            'currency' => $this->currency(),
-            'about' => (string) $this->get(self::KEY_ABOUT_TEXT, ''),
-            'videos' => $this->landingVideos(),
-            'bkash_payment' => $this->bkashPaymentInfo(),
+            'contact_information' => (string) ($values[self::KEY_CONTACT_INFORMATION] ?? ''),
+            'support_email' => (string) ($values[self::KEY_SUPPORT_EMAIL] ?? ''),
+            'currency' => $currency !== '' ? $currency : 'BDT',
+            'about' => (string) ($values[self::KEY_ABOUT_TEXT] ?? ''),
+            'videos' => $this->decodeLandingVideos($values[self::KEY_LANDING_VIDEOS] ?? '[]'),
+            'bkash_payment' => $this->bkashPaymentInfoFrom($values),
+            'entry_popup' => $this->entryPopupFrom($values),
         ];
     }
 
@@ -120,13 +186,11 @@ class SettingService
      */
     public function bkashPaymentInfo(): array
     {
-        $qrPath = $this->get(self::KEY_BKASH_QR_PATH);
-
-        return [
-            'qr_url' => $this->logoUrl(is_string($qrPath) ? $qrPath : null),
-            'merchant_number' => (string) $this->get(self::KEY_BKASH_MERCHANT_NUMBER, ''),
-            'note' => (string) $this->get(self::KEY_BKASH_PAYMENT_NOTE, self::DEFAULTS[self::KEY_BKASH_PAYMENT_NOTE]),
-        ];
+        return $this->bkashPaymentInfoFrom($this->values([
+            self::KEY_BKASH_QR_PATH,
+            self::KEY_BKASH_MERCHANT_NUMBER,
+            self::KEY_BKASH_PAYMENT_NOTE,
+        ]));
     }
 
     /**
@@ -134,20 +198,7 @@ class SettingService
      */
     public function landingVideos(): array
     {
-        $raw = (string) $this->get(self::KEY_LANDING_VIDEOS, '[]');
-        $decoded = json_decode($raw, true);
-        if (! is_array($decoded)) {
-            return [];
-        }
-
-        return collect($decoded)
-            ->filter(fn ($row) => is_array($row) && filled($row['url'] ?? null))
-            ->map(fn ($row) => [
-                'title' => (string) ($row['title'] ?? 'Video'),
-                'url' => (string) $row['url'],
-            ])
-            ->values()
-            ->all();
+        return $this->decodeLandingVideos($this->get(self::KEY_LANDING_VIDEOS, '[]'));
     }
 
     /**
@@ -169,6 +220,7 @@ class SettingService
             'bkash_payment' => $this->bkashPaymentInfo(),
             'bkash_merchant_number' => (string) $this->get(self::KEY_BKASH_MERCHANT_NUMBER, ''),
             'bkash_payment_note' => (string) $this->get(self::KEY_BKASH_PAYMENT_NOTE, self::DEFAULTS[self::KEY_BKASH_PAYMENT_NOTE]),
+            'entry_popup' => $this->entryPopup(),
             'payment_gateways' => $this->paymentGatewayStatus(),
             'course_access_rules' => $this->courseAccessRules(),
             'notification_preferences' => [
@@ -179,6 +231,20 @@ class SettingService
                 'notify_on_new_lesson' => $this->notificationsEnabled('new_lesson'),
             ],
         ];
+    }
+
+    /**
+     * @return array{enabled: bool, title: string, body: string, cta_label: string, cta_url: string}
+     */
+    public function entryPopup(): array
+    {
+        return $this->entryPopupFrom($this->values([
+            self::KEY_SITE_POPUP_ENABLED,
+            self::KEY_SITE_POPUP_TITLE,
+            self::KEY_SITE_POPUP_BODY,
+            self::KEY_SITE_POPUP_CTA_LABEL,
+            self::KEY_SITE_POPUP_CTA_URL,
+        ]));
     }
 
     /**
@@ -204,6 +270,19 @@ class SettingService
             self::KEY_NOTIFY_EVALUATION => isset($data['notify_on_evaluation']) ? ($data['notify_on_evaluation'] ? '1' : '0') : null,
             self::KEY_NOTIFY_MOCK_RESULT => isset($data['notify_on_mock_result']) ? ($data['notify_on_mock_result'] ? '1' : '0') : null,
             self::KEY_NOTIFY_NEW_LESSON => isset($data['notify_on_new_lesson']) ? ($data['notify_on_new_lesson'] ? '1' : '0') : null,
+            self::KEY_SITE_POPUP_ENABLED => isset($data['site_popup_enabled']) ? ($data['site_popup_enabled'] ? '1' : '0') : null,
+            self::KEY_SITE_POPUP_TITLE => array_key_exists('site_popup_title', $data)
+                ? (string) ($data['site_popup_title'] ?? '')
+                : null,
+            self::KEY_SITE_POPUP_BODY => array_key_exists('site_popup_body', $data)
+                ? (string) ($data['site_popup_body'] ?? '')
+                : null,
+            self::KEY_SITE_POPUP_CTA_LABEL => array_key_exists('site_popup_cta_label', $data)
+                ? (string) ($data['site_popup_cta_label'] ?? '')
+                : null,
+            self::KEY_SITE_POPUP_CTA_URL => array_key_exists('site_popup_cta_url', $data)
+                ? (string) ($data['site_popup_cta_url'] ?? '')
+                : null,
         ];
 
         foreach ($writable as $key => $value) {
@@ -336,6 +415,64 @@ class SettingService
             ['key' => $key],
             ['value' => $value],
         );
+
+        Cache::forget('landing.public.v1');
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array{qr_url: ?string, merchant_number: string, note: string}
+     */
+    private function bkashPaymentInfoFrom(array $values): array
+    {
+        $qrPath = $values[self::KEY_BKASH_QR_PATH] ?? null;
+
+        return [
+            'qr_url' => $this->logoUrl(is_string($qrPath) ? $qrPath : null),
+            'merchant_number' => (string) ($values[self::KEY_BKASH_MERCHANT_NUMBER] ?? ''),
+            'note' => (string) ($values[self::KEY_BKASH_PAYMENT_NOTE] ?? self::DEFAULTS[self::KEY_BKASH_PAYMENT_NOTE]),
+        ];
+    }
+
+    /**
+     * @return list<array{title: string, url: string}>
+     */
+    private function decodeLandingVideos(mixed $raw): array
+    {
+        $decoded = json_decode((string) $raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->filter(fn ($row) => is_array($row) && filled($row['url'] ?? null))
+            ->map(fn ($row) => [
+                'title' => (string) ($row['title'] ?? 'Video'),
+                'url' => (string) $row['url'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array{enabled: bool, title: string, body: string, cta_label: string, cta_url: string}
+     */
+    private function entryPopupFrom(array $values): array
+    {
+        $enabled = (string) ($values[self::KEY_SITE_POPUP_ENABLED] ?? self::DEFAULTS[self::KEY_SITE_POPUP_ENABLED]);
+        $title = (string) ($values[self::KEY_SITE_POPUP_TITLE] ?? self::DEFAULTS[self::KEY_SITE_POPUP_TITLE]);
+        $body = (string) ($values[self::KEY_SITE_POPUP_BODY] ?? self::DEFAULTS[self::KEY_SITE_POPUP_BODY]);
+        $ctaLabel = (string) ($values[self::KEY_SITE_POPUP_CTA_LABEL] ?? self::DEFAULTS[self::KEY_SITE_POPUP_CTA_LABEL]);
+        $ctaUrl = (string) ($values[self::KEY_SITE_POPUP_CTA_URL] ?? self::DEFAULTS[self::KEY_SITE_POPUP_CTA_URL]);
+
+        return [
+            'enabled' => $enabled === '1' || $enabled === 'true',
+            'title' => $title !== '' ? $title : (string) self::DEFAULTS[self::KEY_SITE_POPUP_TITLE],
+            'body' => $body,
+            'cta_label' => $ctaLabel !== '' ? $ctaLabel : (string) self::DEFAULTS[self::KEY_SITE_POPUP_CTA_LABEL],
+            'cta_url' => $ctaUrl !== '' ? $ctaUrl : (string) self::DEFAULTS[self::KEY_SITE_POPUP_CTA_URL],
+        ];
     }
 
     private function logoUrl(?string $path): ?string

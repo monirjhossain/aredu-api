@@ -76,12 +76,24 @@ class SettingsActivityLogTest extends TestCase
                 'notify_on_evaluation' => true,
                 'notify_on_mock_result' => true,
                 'notify_on_new_lesson' => true,
+                'site_popup_enabled' => true,
+                'site_popup_title' => 'Welcome offer',
+                'site_popup_body' => 'Try free courses today.',
+                'site_popup_cta_label' => 'Open free courses',
+                'site_popup_cta_url' => '/free-courses',
             ])
             ->assertOk()
             ->assertJsonPath('data.platform_name', 'AR IELTS Lab')
             ->assertJsonPath('data.about_text', 'Landing about copy.')
             ->assertJsonPath('data.landing_videos.0.title', 'Welcome')
-            ->assertJsonPath('data.notification_preferences.notify_on_enrollment', false);
+            ->assertJsonPath('data.notification_preferences.notify_on_enrollment', false)
+            ->assertJsonPath('data.entry_popup.enabled', true)
+            ->assertJsonPath('data.entry_popup.title', 'Welcome offer');
+
+        $this->getJson('/api/v1/settings/public')
+            ->assertOk()
+            ->assertJsonPath('data.entry_popup.enabled', true)
+            ->assertJsonPath('data.entry_popup.cta_url', '/free-courses');
 
         $this->assertSame('AR IELTS Lab', Setting::query()->where('key', 'platform_name')->value('value'));
         $this->assertTrue(
