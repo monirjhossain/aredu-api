@@ -464,6 +464,7 @@ class ListeningMockTestService
             'instructions' => $data['instructions'] ?? null,
             'duration_seconds' => (int) $data['duration_seconds'],
             'is_published' => (bool) ($data['is_published'] ?? false),
+            'is_free_sample' => (bool) ($data['is_free_sample'] ?? false),
         ];
     }
 

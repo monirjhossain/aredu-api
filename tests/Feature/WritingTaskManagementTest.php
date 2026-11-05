@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Course;
+use App\Models\CourseCategory;
+use App\Models\Enrollment;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\WritingSubmission;
@@ -72,6 +75,7 @@ class WritingTaskManagementTest extends TestCase
             ->assertStatus(422);
 
         $student = $this->userWithRole('student');
+        $this->enroll($student);
         $studentToken = $student->createToken('api')->plainTextToken;
 
         $this->withToken($studentToken)
@@ -144,5 +148,27 @@ class WritingTaskManagementTest extends TestCase
         Auth::forgetGuards();
 
         return $user;
+    }
+
+    private function enroll(User $student): void
+    {
+        $category = CourseCategory::query()->firstOrCreate(
+            ['slug' => 'practice-access'],
+            ['name' => 'Practice Access'],
+        );
+        $course = Course::query()->create([
+            'category_id' => $category->id,
+            'title' => 'Access Course',
+            'slug' => 'access-'.uniqid(),
+            'exam_type' => 'academic',
+            'price' => 0,
+            'is_published' => true,
+        ]);
+        Enrollment::query()->create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'status' => Enrollment::ACTIVE,
+            'enrolled_at' => now(),
+        ]);
     }
 }

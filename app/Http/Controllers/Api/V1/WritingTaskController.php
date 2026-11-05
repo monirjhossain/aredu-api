@@ -10,12 +10,17 @@ use App\Http\Requests\Writing\WritingTaskRequest;
 use App\Http\Resources\WritingTaskResource;
 use App\Http\Responses\ApiResponse;
 use App\Models\WritingTask;
+use App\Services\Practice\PracticeAccessService;
 use App\Services\Writing\WritingTaskService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class WritingTaskController extends Controller
 {
-    public function __construct(private readonly WritingTaskService $tasks) {}
+    public function __construct(
+        private readonly WritingTaskService $tasks,
+        private readonly PracticeAccessService $practiceAccess,
+    ) {}
 
     public function index(WritingTaskIndexRequest $request): JsonResponse
     {
@@ -105,19 +110,19 @@ class WritingTaskController extends Controller
 
     public function studentIndex(WritingTaskIndexRequest $request): JsonResponse
     {
-        $page = $this->tasks->paginatePublished($request->validated());
+        $page = $this->tasks->paginateForStudent($request->user(), $request->validated());
 
         return ApiResponse::success(
             WritingTaskResource::collection($page->getCollection())->resolve(),
             'Published writing tasks retrieved.',
             200,
-            $this->meta($page),
+            $this->meta($page, $request->user()),
         );
     }
 
-    public function studentShow(WritingTask $writingTask): JsonResponse
+    public function studentShow(Request $request, WritingTask $writingTask): JsonResponse
     {
-        $task = $this->tasks->findPublished($writingTask->id);
+        $task = $this->tasks->findPublishedForStudent($request->user(), $writingTask->id);
 
         return ApiResponse::success(
             WritingTaskResource::make($task)->resolve(),
@@ -127,15 +132,21 @@ class WritingTaskController extends Controller
 
     /**
      * @param  \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, WritingTask>  $page
-     * @return array<string, int>
+     * @return array<string, mixed>
      */
-    private function meta($page): array
+    private function meta($page, $user = null): array
     {
-        return [
+        $meta = [
             'current_page' => $page->currentPage(),
             'last_page' => $page->lastPage(),
             'per_page' => $page->perPage(),
             'total' => $page->total(),
         ];
+
+        if ($user !== null) {
+            $meta['practice_access'] = $this->practiceAccess->meta($user);
+        }
+
+        return $meta;
     }
 }

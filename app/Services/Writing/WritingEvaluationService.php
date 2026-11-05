@@ -23,12 +23,13 @@ class WritingEvaluationService
      * Teachers with writing.evaluate may score submitted answers.
      * Without a separate assignment table, "assigned" means that permission.
      *
-     * @param  array{search?: string|null, evaluation_status?: string|null}  $filters
+     * @param  array{search?: string|null, evaluation_status?: string|null, context?: string|null}  $filters
      */
     public function paginateForTeacher(array $filters): LengthAwarePaginator
     {
         $search = $this->term($filters['search'] ?? null);
         $status = $filters['evaluation_status'] ?? null;
+        $context = $filters['context'] ?? null;
 
         return WritingSubmission::query()
             ->with([
@@ -39,6 +40,8 @@ class WritingEvaluationService
             ->where('status', WritingSubmission::STATUS_SUBMITTED)
             ->when($status === 'pending', fn ($query) => $query->whereDoesntHave('evaluation'))
             ->when($status === 'evaluated', fn ($query) => $query->whereHas('evaluation'))
+            ->when($context === 'practice', fn ($query) => $query->where('context_key', WritingSubmission::CONTEXT_PRACTICE))
+            ->when($context === 'full_mock', fn ($query) => $query->where('context_key', 'like', 'fmss:%'))
             ->when($search !== null, function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->whereHas('task', fn ($task) => $task->where('title', 'like', $search))

@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\WritingEvaluation;
 use App\Models\WritingSubmission;
 use App\Notifications\Concerns\StoresDatabaseNotification;
+use App\Support\EvaluationNotificationLink;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -36,6 +37,12 @@ class WritingEvaluationCompletedNotification extends Notification implements Sho
             ? (string) $this->submission->task?->title
             : 'your writing';
 
+        $link = EvaluationNotificationLink::forTask(
+            '/writing-tasks',
+            (int) $this->submission->writing_task_id,
+            $this->submission->context_key,
+        );
+
         return $this->databasePayload(
             'writing_evaluation_completed',
             'Writing evaluation completed',
@@ -44,7 +51,10 @@ class WritingEvaluationCompletedNotification extends Notification implements Sho
                 'submission_id' => $this->submission->id,
                 'writing_task_id' => $this->submission->writing_task_id,
                 'overall_band' => $this->evaluation->overall_band,
-                'url' => '/writing-tasks/'.$this->submission->writing_task_id,
+                'context_key' => $link['context_key'],
+                'context_label' => $link['context_label'],
+                'session_uuid' => $link['session_uuid'],
+                'url' => $link['url'],
             ],
         );
     }

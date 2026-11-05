@@ -15,8 +15,10 @@ class DatabaseSeeder extends Seeder
             DemoCourseSeeder::class,
             DemoReadingMockSeeder::class,
             DemoListeningMockSeeder::class,
+            FreeMockSampleSeeder::class,
             DemoWritingSeeder::class,
             DemoSpeakingSeeder::class,
+            DemoFullMockExamSeeder::class,
             DemoResultsSeeder::class,
         ]);
     }

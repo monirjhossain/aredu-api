@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\ExamContext;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -19,12 +20,16 @@ class WritingSubmissionResource extends JsonResource
             $evaluationStatus = $hasEvaluation ? 'evaluated' : 'pending';
         }
 
+        $contextKey = (string) ($this->context_key ?: 'practice');
+
         return [
             'id' => $this->id,
             'writing_task_id' => $this->writing_task_id,
             'body' => $this->body,
             'word_count' => $this->word_count,
             'status' => $this->status,
+            'context_key' => $contextKey,
+            'context_label' => ExamContext::label($contextKey),
             'evaluation_status' => $evaluationStatus,
             'submitted_at' => $this->submitted_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

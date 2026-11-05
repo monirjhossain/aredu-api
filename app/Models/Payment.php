@@ -21,6 +21,9 @@ class Payment extends Model
 
     public const GATEWAY_BKASH = 'bkash';
 
+    /** Zero-total orders (free course or 100% coupon) — no external gateway. */
+    public const GATEWAY_FREE = 'free';
+
     protected $fillable = [
         'order_id',
         'gateway',

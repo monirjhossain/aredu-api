@@ -12,12 +12,15 @@ class WritingSubmission extends Model
 
     public const STATUS_SUBMITTED = 'submitted';
 
+    public const CONTEXT_PRACTICE = 'practice';
+
     protected $fillable = [
         'writing_task_id',
         'user_id',
         'body',
         'word_count',
         'status',
+        'context_key',
         'submitted_at',
     ];
 

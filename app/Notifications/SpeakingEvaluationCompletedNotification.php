@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\SpeakingEvaluation;
 use App\Models\SpeakingRecording;
 use App\Notifications\Concerns\StoresDatabaseNotification;
+use App\Support\EvaluationNotificationLink;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -36,6 +37,12 @@ class SpeakingEvaluationCompletedNotification extends Notification implements Sh
             ? (string) $this->recording->task?->title
             : 'your speaking';
 
+        $link = EvaluationNotificationLink::forTask(
+            '/speaking-tasks',
+            (int) $this->recording->speaking_task_id,
+            $this->recording->context_key,
+        );
+
         return $this->databasePayload(
             'speaking_evaluation_completed',
             'Speaking evaluation completed',
@@ -44,7 +51,10 @@ class SpeakingEvaluationCompletedNotification extends Notification implements Sh
                 'recording_id' => $this->recording->id,
                 'speaking_task_id' => $this->recording->speaking_task_id,
                 'overall_band' => $this->evaluation->overall_band,
-                'url' => '/speaking-tasks/'.$this->recording->speaking_task_id,
+                'context_key' => $link['context_key'],
+                'context_label' => $link['context_label'],
+                'session_uuid' => $link['session_uuid'],
+                'url' => $link['url'],
             ],
         );
     }

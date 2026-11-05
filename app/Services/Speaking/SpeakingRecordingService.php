@@ -2,9 +2,12 @@
 
 namespace App\Services\Speaking;
 
+use App\Models\FullMockExamSection;
 use App\Models\SpeakingRecording;
 use App\Models\SpeakingTask;
 use App\Models\User;
+use App\Services\IELTS\FullMockSessionService;
+use App\Support\ExamContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
@@ -14,27 +17,37 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SpeakingRecordingService
 {
-    public function __construct(private readonly SpeakingTaskService $tasks) {}
+    public function __construct(
+        private readonly SpeakingTaskService $tasks,
+        private readonly FullMockSessionService $fullMockSessions,
+    ) {}
 
-    public function forStudentTask(User $user, SpeakingTask $task): ?SpeakingRecording
+    /**
+     * @param  string|null  $contextKey  "practice" (default) or "fmss:{sessionSectionId}" for full mock exams
+     */
+    public function forStudentTask(User $user, SpeakingTask $task, ?string $contextKey = null): ?SpeakingRecording
     {
-        $this->tasks->findPublished($task->id);
+        $contextKey = ExamContext::normalize($contextKey);
+        $this->resolveTask($user, $task, $contextKey, false);
 
         return SpeakingRecording::query()
             ->with(['evaluation.teacher:id,name', 'task'])
             ->where('user_id', $user->id)
             ->where('speaking_task_id', $task->id)
+            ->where('context_key', $contextKey)
             ->orderByDesc('id')
             ->first();
     }
 
-    public function upload(User $user, SpeakingTask $task, UploadedFile $file, ?int $durationSeconds = null): SpeakingRecording
+    public function upload(User $user, SpeakingTask $task, UploadedFile $file, ?int $durationSeconds = null, ?string $contextKey = null): SpeakingRecording
     {
-        $task = $this->tasks->findPublished($task->id);
+        $contextKey = ExamContext::normalize($contextKey);
+        $task = $this->resolveTask($user, $task, $contextKey, true);
 
         $submitted = SpeakingRecording::query()
             ->where('user_id', $user->id)
             ->where('speaking_task_id', $task->id)
+            ->where('context_key', $contextKey)
             ->where('status', SpeakingRecording::STATUS_SUBMITTED)
             ->first();
 
@@ -47,6 +60,7 @@ class SpeakingRecordingService
         $draft = SpeakingRecording::query()
             ->where('user_id', $user->id)
             ->where('speaking_task_id', $task->id)
+            ->where('context_key', $contextKey)
             ->where('status', SpeakingRecording::STATUS_UPLOADED)
             ->orderByDesc('id')
             ->first();
@@ -76,16 +90,19 @@ class SpeakingRecordingService
             'size_bytes' => $size,
             'duration_seconds' => $durationSeconds,
             'status' => SpeakingRecording::STATUS_UPLOADED,
+            'context_key' => $contextKey,
         ])->load(['task', 'evaluation']);
     }
 
-    public function submit(User $user, SpeakingTask $task): SpeakingRecording
+    public function submit(User $user, SpeakingTask $task, ?string $contextKey = null): SpeakingRecording
     {
-        $this->tasks->findPublished($task->id);
+        $contextKey = ExamContext::normalize($contextKey);
+        $this->resolveTask($user, $task, $contextKey, true);
 
         $recording = SpeakingRecording::query()
             ->where('user_id', $user->id)
             ->where('speaking_task_id', $task->id)
+            ->where('context_key', $contextKey)
             ->orderByDesc('id')
             ->first();
 
@@ -158,6 +175,21 @@ class SpeakingRecordingService
                 'Content-Disposition' => 'inline',
             ],
         );
+    }
+
+    /**
+     * Practice: enrollment-gated published task. Full mock: session ownership/time is verified instead
+     * (access to the exam itself was checked when the session started).
+     */
+    private function resolveTask(User $user, SpeakingTask $task, string $contextKey, bool $write): SpeakingTask
+    {
+        if ($contextKey === SpeakingRecording::CONTEXT_PRACTICE) {
+            return $this->tasks->findPublishedForStudent($user, $task->id);
+        }
+
+        $this->fullMockSessions->assertContextOwned($user, $contextKey, FullMockExamSection::SKILL_SPEAKING, $task->id, $write);
+
+        return $this->tasks->findPublished($task->id);
     }
 
     private function assertOwner(User $user, SpeakingRecording $recording): void

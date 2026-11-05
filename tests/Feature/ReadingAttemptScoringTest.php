@@ -201,6 +201,7 @@ class ReadingAttemptScoringTest extends TestCase
             'instructions' => 'Read the passage and answer.',
             'duration_seconds' => 3600,
             'is_published' => true,
+            'is_free_sample' => true,
         ]);
 
         $section = MockTestSection::query()->create([

@@ -167,11 +167,26 @@ class LessonProgressService
     public function certificateFor(User $user, int $courseId): ?array
     {
         $certificate = Certificate::query()
+            ->with(['user:id,name', 'course:id,title,slug,exam_type'])
             ->where('user_id', $user->id)
             ->where('course_id', $courseId)
             ->first();
 
         return $certificate ? $this->serializeCertificate($certificate) : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function showOwned(User $user, Certificate $certificate): array
+    {
+        if ((int) $certificate->user_id !== (int) $user->id) {
+            throw new AuthorizationException('You can only view your own certificates.');
+        }
+
+        $certificate->loadMissing(['user:id,name', 'course:id,title,slug,exam_type']);
+
+        return $this->serializeCertificate($certificate);
     }
 
     private function assertCanTrack(User $user, Lesson $lesson): void
@@ -278,12 +293,24 @@ class LessonProgressService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @return array<string, mixed>
+     */
     private function serializeCertificate(Certificate $certificate): array
     {
+        $certificate->loadMissing(['user:id,name', 'course:id,title,slug,exam_type']);
+
         return [
             'id' => $certificate->id,
             'certificate_number' => $certificate->certificate_number,
             'issued_at' => $certificate->issued_at?->toIso8601String(),
+            'student_name' => $certificate->user?->name,
+            'course' => $certificate->course ? [
+                'id' => $certificate->course->id,
+                'title' => $certificate->course->title,
+                'slug' => $certificate->course->slug,
+                'exam_type' => $certificate->course->exam_type,
+            ] : null,
         ];
     }
 }

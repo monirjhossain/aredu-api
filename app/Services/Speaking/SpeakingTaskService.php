@@ -4,12 +4,16 @@ namespace App\Services\Speaking;
 
 use App\Models\SpeakingQuestion;
 use App\Models\SpeakingTask;
+use App\Models\User;
+use App\Services\Practice\PracticeAccessService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SpeakingTaskService
 {
+    public function __construct(private readonly PracticeAccessService $practiceAccess) {}
+
     /**
      * @param  array{search?: string|null, part?: int|string|null, is_published?: mixed}  $filters
      */
@@ -58,6 +62,18 @@ class SpeakingTaskService
             ->paginate(12);
     }
 
+    /**
+     * @param  array{search?: string|null, part?: int|string|null}  $filters
+     */
+    public function paginateForStudent(User $user, array $filters = []): LengthAwarePaginator
+    {
+        if (! $this->practiceAccess->hasFullPracticeAccess($user)) {
+            return SpeakingTask::query()->whereRaw('0 = 1')->paginate(12);
+        }
+
+        return $this->paginatePublished($filters);
+    }
+
     public function find(SpeakingTask $task): SpeakingTask
     {
         return $task->load(['questions'])->loadCount('questions');
@@ -71,6 +87,13 @@ class SpeakingTaskService
             ->with('questions')
             ->withCount('questions')
             ->firstOrFail();
+    }
+
+    public function findPublishedForStudent(User $user, int|string $id): SpeakingTask
+    {
+        $this->practiceAccess->assertFullPracticeAccess($user);
+
+        return $this->findPublished($id);
     }
 
     /**

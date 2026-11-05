@@ -2,7 +2,9 @@
 
 namespace App\Services\Writing;
 
+use App\Models\User;
 use App\Models\WritingTask;
+use App\Services\Practice\PracticeAccessService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -10,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 class WritingTaskService
 {
+    public function __construct(private readonly PracticeAccessService $practiceAccess) {}
+
     /**
      * @param  array{search?: string|null, exam_type?: string|null, task_type?: string|null, is_published?: string|null}  $filters
      */
@@ -61,6 +65,18 @@ class WritingTaskService
             ->paginate(12);
     }
 
+    /**
+     * @param  array{search?: string|null, exam_type?: string|null, task_type?: string|null}  $filters
+     */
+    public function paginateForStudent(User $user, array $filters = []): LengthAwarePaginator
+    {
+        if (! $this->practiceAccess->hasFullPracticeAccess($user)) {
+            return WritingTask::query()->whereRaw('0 = 1')->paginate(12);
+        }
+
+        return $this->paginatePublished($filters);
+    }
+
     public function find(WritingTask $task): WritingTask
     {
         return $task;
@@ -72,6 +88,13 @@ class WritingTaskService
             ->whereKey($id)
             ->where('is_published', true)
             ->firstOrFail();
+    }
+
+    public function findPublishedForStudent(User $user, int|string $id): WritingTask
+    {
+        $this->practiceAccess->assertFullPracticeAccess($user);
+
+        return $this->findPublished($id);
     }
 
     /**

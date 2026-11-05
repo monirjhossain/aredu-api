@@ -87,4 +87,9 @@ class User extends Authenticatable
             ->whereHas('permissions', fn ($query) => $query->where('slug', $slug))
             ->exists();
     }
+
+    public function hasActiveEnrollment(): bool
+    {
+        return $this->enrollments()->where('status', Enrollment::ACTIVE)->exists();
+    }
 }

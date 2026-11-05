@@ -13,7 +13,9 @@ use App\Models\TestAttemptAnswer;
 use App\Models\TestResult;
 use App\Models\User;
 use App\Notifications\MockTestResultAvailableNotification;
+use App\Services\Practice\PracticeAccessService;
 use App\Services\Settings\SettingService;
+use App\Support\ExamContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -24,7 +26,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ListeningAttemptService
 {
-    public function __construct(private readonly SettingService $settings) {}
+    public function __construct(
+        private readonly SettingService $settings,
+        private readonly PracticeAccessService $practiceAccess,
+    ) {}
 
     /**
      * @param  array{search?: string|null, exam_type?: string|null}  $filters
@@ -44,9 +49,29 @@ class ListeningAttemptService
             ->when(($filters['exam_type'] ?? null) !== null && $filters['exam_type'] !== '', function ($query) use ($filters) {
                 $query->where('exam_type', $filters['exam_type']);
             })
+            ->when(! empty($filters['free_sample']), function ($query) {
+                $query->where('is_free_sample', true);
+            })
             ->orderBy('title')
             ->orderBy('id')
             ->paginate(12);
+    }
+
+    /**
+     * @param  array{search?: string|null, exam_type?: string|null}  $filters
+     */
+    public function paginateForStudent(User $user, array $filters = []): LengthAwarePaginator
+    {
+        if (! $this->practiceAccess->hasFullPracticeAccess($user)) {
+            $filters['free_sample'] = true;
+        }
+
+        return $this->paginatePublished($filters);
+    }
+
+    public function paginateFreeSamples(array $filters = []): LengthAwarePaginator
+    {
+        return $this->paginatePublished(array_merge($filters, ['free_sample' => true]));
     }
 
     public function publishedOverview(string $slug): MockTest
@@ -64,17 +89,42 @@ class ListeningAttemptService
         return $test;
     }
 
+    public function publishedOverviewForStudent(User $user, string $slug): MockTest
+    {
+        $test = $this->publishedOverview($slug);
+        $this->practiceAccess->assertCanAccessMock($user, $test);
+
+        return $test;
+    }
+
+    public function freeSampleOverview(string $slug): MockTest
+    {
+        $test = MockTest::query()
+            ->where('module', MockTest::MODULE_LISTENING)
+            ->where('is_published', true)
+            ->where('is_free_sample', true)
+            ->where('slug', $slug)
+            ->first();
+
+        if ($test === null) {
+            throw (new ModelNotFoundException)->setModel(MockTest::class, [$slug]);
+        }
+
+        return $test;
+    }
+
     /**
      * @return array<string, mixed>
      */
     public function startOrResume(User $user, string $slug): array
     {
-        $test = $this->publishedOverview($slug);
+        $test = $this->publishedOverviewForStudent($user, $slug);
 
         return DB::transaction(function () use ($user, $test) {
             $existing = TestAttempt::query()
                 ->where('user_id', $user->id)
                 ->where('mock_test_id', $test->id)
+                ->where('context_key', TestAttempt::CONTEXT_PRACTICE)
                 ->where('status', TestAttempt::STATUS_IN_PROGRESS)
                 ->lockForUpdate()
                 ->first();
@@ -94,10 +144,91 @@ class ListeningAttemptService
                 'started_at' => $startedAt,
                 'must_submit_at' => $startedAt->copy()->addSeconds((int) $test->duration_seconds),
                 'status' => TestAttempt::STATUS_IN_PROGRESS,
+                'context_key' => TestAttempt::CONTEXT_PRACTICE,
             ]);
 
             return $this->payload($attempt, false);
         });
+    }
+
+    /**
+     * Start or resume an attempt scoped to an exam context (e.g. fmss:{id}).
+     * Access control is the caller's responsibility (full mock session already authorised).
+     *
+     * For non-practice contexts only one attempt per (user, test, context) is ever created:
+     * an expired in-progress attempt is finalized and returned instead of being replaced.
+     *
+     * @return array<string, mixed>
+     */
+    public function startOrResumeForContext(User $user, MockTest $test, string $contextKey, ?int $durationSeconds = null): array
+    {
+        $contextKey = ExamContext::normalize($contextKey);
+
+        if ($test->module !== MockTest::MODULE_LISTENING || ! $test->is_published) {
+            throw (new ModelNotFoundException)->setModel(MockTest::class, [$test->id]);
+        }
+
+        $isPractice = $contextKey === TestAttempt::CONTEXT_PRACTICE;
+
+        return DB::transaction(function () use ($user, $test, $contextKey, $durationSeconds, $isPractice) {
+            $existing = TestAttempt::query()
+                ->where('user_id', $user->id)
+                ->where('mock_test_id', $test->id)
+                ->where('context_key', $contextKey)
+                ->where('status', TestAttempt::STATUS_IN_PROGRESS)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing !== null) {
+                if (! $this->isExpired($existing)) {
+                    return $this->payload($existing, false);
+                }
+
+                $finalized = $this->finalizeAttempt($existing);
+
+                if (! $isPractice) {
+                    return $this->payload($finalized, true);
+                }
+            } elseif (! $isPractice) {
+                $submitted = TestAttempt::query()
+                    ->where('user_id', $user->id)
+                    ->where('mock_test_id', $test->id)
+                    ->where('context_key', $contextKey)
+                    ->where('status', TestAttempt::STATUS_SUBMITTED)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($submitted !== null) {
+                    return $this->payload($submitted, true);
+                }
+            }
+
+            $startedAt = now();
+            $seconds = $durationSeconds !== null && $durationSeconds > 0
+                ? $durationSeconds
+                : (int) $test->duration_seconds;
+
+            $attempt = TestAttempt::query()->create([
+                'mock_test_id' => $test->id,
+                'user_id' => $user->id,
+                'started_at' => $startedAt,
+                'must_submit_at' => $startedAt->copy()->addSeconds($seconds),
+                'status' => TestAttempt::STATUS_IN_PROGRESS,
+                'context_key' => $contextKey,
+            ]);
+
+            return $this->payload($attempt, false);
+        });
+    }
+
+    /**
+     * Finalize (score) an owned attempt without a controller round-trip. Used by full mock reconciliation.
+     */
+    public function finalizeOwnedAttempt(User $user, TestAttempt $attempt): TestAttempt
+    {
+        $attempt = $this->ownedListeningAttempt($user, $attempt);
+
+        return $this->finalizeAttempt($attempt);
     }
 
     /**

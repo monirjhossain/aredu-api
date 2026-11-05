@@ -12,6 +12,8 @@ class SpeakingRecording extends Model
 
     public const STATUS_SUBMITTED = 'submitted';
 
+    public const CONTEXT_PRACTICE = 'practice';
+
     protected $fillable = [
         'speaking_task_id',
         'user_id',
@@ -21,6 +23,7 @@ class SpeakingRecording extends Model
         'size_bytes',
         'duration_seconds',
         'status',
+        'context_key',
         'submitted_at',
     ];
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\ExamContext;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,6 +22,8 @@ class SpeakingRecordingResource extends JsonResource
             $evaluationStatus = 'uploaded';
         }
 
+        $contextKey = (string) ($this->context_key ?: 'practice');
+
         return [
             'id' => $this->id,
             'speaking_task_id' => $this->speaking_task_id,
@@ -28,6 +31,8 @@ class SpeakingRecordingResource extends JsonResource
             'size_bytes' => $this->size_bytes,
             'duration_seconds' => $this->duration_seconds,
             'status' => $this->status,
+            'context_key' => $contextKey,
+            'context_label' => ExamContext::label($contextKey),
             'evaluation_status' => $evaluationStatus,
             'submitted_at' => $this->submitted_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

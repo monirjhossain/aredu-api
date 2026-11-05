@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Course;
+use App\Models\CourseCategory;
+use App\Models\Enrollment;
 use App\Models\Role;
 use App\Models\SpeakingQuestion;
 use App\Models\SpeakingTask;
@@ -97,7 +100,9 @@ class SpeakingTaskManagementTest extends TestCase
             ->assertJsonPath('data.is_published', true);
 
         Auth::forgetGuards();
-        $studentToken = $this->tokenFor('student');
+        $student = $this->userWithRole('student');
+        $this->enroll($student);
+        $studentToken = $student->createToken('api')->plainTextToken;
 
         $this->withToken($studentToken)
             ->getJson('/api/v1/speaking-tasks')
@@ -154,5 +159,27 @@ class SpeakingTaskManagementTest extends TestCase
         Auth::forgetGuards();
 
         return $user;
+    }
+
+    private function enroll(User $student): void
+    {
+        $category = CourseCategory::query()->firstOrCreate(
+            ['slug' => 'practice-access'],
+            ['name' => 'Practice Access'],
+        );
+        $course = Course::query()->create([
+            'category_id' => $category->id,
+            'title' => 'Access Course',
+            'slug' => 'access-'.uniqid(),
+            'exam_type' => 'academic',
+            'price' => 0,
+            'is_published' => true,
+        ]);
+        Enrollment::query()->create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'status' => Enrollment::ACTIVE,
+            'enrolled_at' => now(),
+        ]);
     }
 }

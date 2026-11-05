@@ -20,12 +20,13 @@ class SpeakingEvaluationService
     ) {}
 
     /**
-     * @param  array{search?: string|null, evaluation_status?: string|null}  $filters
+     * @param  array{search?: string|null, evaluation_status?: string|null, context?: string|null}  $filters
      */
     public function paginateForTeacher(array $filters): LengthAwarePaginator
     {
         $search = $this->term($filters['search'] ?? null);
         $status = $filters['evaluation_status'] ?? null;
+        $context = $filters['context'] ?? null;
 
         return SpeakingRecording::query()
             ->with([
@@ -36,6 +37,8 @@ class SpeakingEvaluationService
             ->where('status', SpeakingRecording::STATUS_SUBMITTED)
             ->when($status === 'pending', fn ($query) => $query->whereDoesntHave('evaluation'))
             ->when($status === 'evaluated', fn ($query) => $query->whereHas('evaluation'))
+            ->when($context === 'practice', fn ($query) => $query->where('context_key', SpeakingRecording::CONTEXT_PRACTICE))
+            ->when($context === 'full_mock', fn ($query) => $query->where('context_key', 'like', 'fmss:%'))
             ->when($search !== null, function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->whereHas('task', fn ($task) => $task->where('title', 'like', $search))

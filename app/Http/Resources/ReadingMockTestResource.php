@@ -21,6 +21,7 @@ class ReadingMockTestResource extends JsonResource
             'instructions' => $this->instructions,
             'duration_seconds' => $this->duration_seconds,
             'is_published' => (bool) $this->is_published,
+            'is_free_sample' => (bool) $this->is_free_sample,
             'sections_count' => $this->when(isset($this->sections_count), $this->sections_count),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

@@ -36,6 +36,12 @@ class PaymentService
     {
         $order = $this->assertPayableOrder($user, $order);
 
+        if ((float) $order->total <= 0.009) {
+            throw ValidationException::withMessages([
+                'order' => ['This order is free. Use free checkout instead of SSLCommerz.'],
+            ]);
+        }
+
         if ((float) $order->total < 10) {
             throw ValidationException::withMessages([
                 'order' => ['SSLCommerz requires a minimum amount of 10 BDT.'],
@@ -92,6 +98,13 @@ class PaymentService
     public function initiateBkash(User $user, Order $order): array
     {
         $order = $this->assertPayableOrder($user, $order);
+
+        if ((float) $order->total <= 0.009) {
+            throw ValidationException::withMessages([
+                'order' => ['This order is free. Use free checkout instead of bKash.'],
+            ]);
+        }
+
         $payment = $this->createInitiatedPayment($order, Payment::GATEWAY_BKASH);
         $callbackUrl = rtrim((string) config('app.url'), '/').'/api/v1/payments/bkash/callback';
 
@@ -423,6 +436,55 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    /**
+     * Settle a zero-total pending order (free course or 100% coupon) without a gateway.
+     */
+    public function settleZeroTotal(User $user, Order $order): Payment
+    {
+        if ((int) $order->user_id !== (int) $user->id) {
+            throw new AuthorizationException('This order is not available.');
+        }
+
+        if ((float) $order->total > 0.009) {
+            throw ValidationException::withMessages([
+                'order' => ['This order requires a payment gateway.'],
+            ]);
+        }
+
+        if ($order->status === Order::PAID) {
+            $existingPaid = Payment::query()
+                ->where('order_id', $order->id)
+                ->where('status', Payment::PAID)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existingPaid !== null) {
+                return $existingPaid;
+            }
+        }
+
+        $order = $this->assertPayableOrder($user, $order);
+
+        $payment = Payment::query()->create([
+            'order_id' => $order->id,
+            'gateway' => Payment::GATEWAY_FREE,
+            'status' => Payment::INITIATED,
+            'amount' => $order->total,
+            'currency' => $order->currency ?: 'BDT',
+            'gateway_transaction_id' => 'free-'.$order->id.'-'.Str::lower(Str::random(8)),
+            'gateway_reference' => null,
+        ]);
+
+        $this->activity->record(
+            $user,
+            'payment.free_settled',
+            $payment,
+            'Free checkout settled for order '.$order->order_number.'.',
+        );
+
+        return $this->markPaid($payment, 'FREE-'.$order->order_number, 'FREE');
     }
 
     /**

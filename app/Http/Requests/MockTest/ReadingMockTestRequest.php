@@ -24,6 +24,7 @@ class ReadingMockTestRequest extends FormRequest
             'instructions' => ['nullable', 'string'],
             'duration_seconds' => ['required', 'integer', 'min:60', 'max:18000'],
             'is_published' => ['sometimes', 'boolean'],
+            'is_free_sample' => ['sometimes', 'boolean'],
         ];
     }
 }

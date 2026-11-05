@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Models\TestAttempt;
 use App\Services\MockTest\ReadingAttemptService;
+use App\Services\Practice\PracticeAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReadingAttemptController extends Controller
 {
-    public function __construct(private readonly ReadingAttemptService $attempts) {}
+    public function __construct(
+        private readonly ReadingAttemptService $attempts,
+        private readonly PracticeAccessService $practiceAccess,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -21,7 +25,7 @@ class ReadingAttemptController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $page = $this->attempts->paginatePublished($filters);
+        $page = $this->attempts->paginateForStudent($request->user(), $filters);
 
         return ApiResponse::success(
             $page->getCollection()->map(fn ($test) => [
@@ -31,6 +35,7 @@ class ReadingAttemptController extends Controller
                 'exam_type' => $test->exam_type,
                 'duration_seconds' => $test->duration_seconds,
                 'instructions' => $test->instructions,
+                'is_free_sample' => (bool) $test->is_free_sample,
             ])->values()->all(),
             'Reading tests retrieved.',
             200,
@@ -39,13 +44,14 @@ class ReadingAttemptController extends Controller
                 'last_page' => $page->lastPage(),
                 'per_page' => $page->perPage(),
                 'total' => $page->total(),
+                'practice_access' => $this->practiceAccess->meta($request->user()),
             ],
         );
     }
 
-    public function show(string $slug): JsonResponse
+    public function show(Request $request, string $slug): JsonResponse
     {
-        $test = $this->attempts->publishedOverview($slug);
+        $test = $this->attempts->publishedOverviewForStudent($request->user(), $slug);
 
         return ApiResponse::success([
             'id' => $test->id,
@@ -54,6 +60,7 @@ class ReadingAttemptController extends Controller
             'exam_type' => $test->exam_type,
             'duration_seconds' => $test->duration_seconds,
             'instructions' => $test->instructions,
+            'is_free_sample' => (bool) $test->is_free_sample,
         ], 'Reading test retrieved.');
     }
 

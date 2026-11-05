@@ -9,6 +9,7 @@ use App\Http\Responses\ApiResponse;
 use App\Models\SpeakingRecording;
 use App\Models\SpeakingTask;
 use App\Services\Speaking\SpeakingRecordingService;
+use App\Support\ExamContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,7 +20,8 @@ class SpeakingRecordingController extends Controller
 
     public function showForTask(Request $request, SpeakingTask $speakingTask): JsonResponse
     {
-        $recording = $this->recordings->forStudentTask($request->user(), $speakingTask);
+        $contextKey = ExamContext::normalize($request->query('context_key'));
+        $recording = $this->recordings->forStudentTask($request->user(), $speakingTask, $contextKey);
 
         return ApiResponse::success(
             $recording ? SpeakingRecordingResource::make($recording)->resolve() : null,
@@ -30,6 +32,7 @@ class SpeakingRecordingController extends Controller
     public function upload(SpeakingRecordingUploadRequest $request, SpeakingTask $speakingTask): JsonResponse
     {
         $data = $request->validated();
+        $contextKey = ExamContext::normalize($data['context_key'] ?? $request->query('context_key'));
 
         return ApiResponse::success(
             SpeakingRecordingResource::make(
@@ -38,6 +41,7 @@ class SpeakingRecordingController extends Controller
                     $speakingTask,
                     $request->file('recording'),
                     isset($data['duration_seconds']) ? (int) $data['duration_seconds'] : null,
+                    $contextKey,
                 )
             )->resolve(),
             'Speaking recording uploaded.',
@@ -47,9 +51,11 @@ class SpeakingRecordingController extends Controller
 
     public function submit(Request $request, SpeakingTask $speakingTask): JsonResponse
     {
+        $contextKey = ExamContext::normalize($request->input('context_key', $request->query('context_key')));
+
         return ApiResponse::success(
             SpeakingRecordingResource::make(
-                $this->recordings->submit($request->user(), $speakingTask)
+                $this->recordings->submit($request->user(), $speakingTask, $contextKey)
             )->resolve(),
             'Speaking recording submitted.',
         );

@@ -12,12 +12,14 @@ use App\Http\Controllers\Api\V1\LandingController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\PublicCourseController;
+use App\Http\Controllers\Api\V1\PublicMockPracticeController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\UserRoleController;
 use App\Http\Controllers\Api\V1\LessonPlaybackController;
 use App\Http\Controllers\Api\V1\LessonEngagementController;
 use App\Http\Controllers\Api\V1\LessonProgressController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\AdminCouponController;
 use App\Http\Controllers\Api\V1\AdminOrderController;
 use App\Http\Controllers\Api\V1\AdminPaymentController;
 use App\Http\Controllers\Api\V1\AdminStudentController;
@@ -25,6 +27,9 @@ use App\Http\Controllers\Api\V1\AdminAccountController;
 use App\Http\Controllers\Api\V1\AdminFinanceController;
 use App\Http\Controllers\Api\V1\BkashPaymentController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
+use App\Http\Controllers\Api\V1\StudentCertificateController;
+use App\Http\Controllers\Api\V1\StudentSkillAnalyticsController;
+use App\Http\Controllers\Api\V1\FreePaymentController;
 use App\Http\Controllers\Api\V1\SslCommerzPaymentController;
 use App\Http\Controllers\Api\V1\BandConversionController;
 use App\Http\Controllers\Api\V1\ListeningAttemptController;
@@ -43,6 +48,8 @@ use App\Http\Controllers\Api\V1\SpeakingTaskController;
 use App\Http\Controllers\Api\V1\WritingEvaluationController;
 use App\Http\Controllers\Api\V1\WritingSubmissionController;
 use App\Http\Controllers\Api\V1\WritingTaskController;
+use App\Http\Controllers\Api\V1\FullMockExamController;
+use App\Http\Controllers\Api\V1\FullMockSessionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
@@ -51,6 +58,10 @@ Route::get('/settings/public', [SettingController::class, 'publicBranding']);
 Route::get('/categories', [PublicCourseController::class, 'categories']);
 Route::get('/courses', [PublicCourseController::class, 'index']);
 Route::get('/courses/{slug}', [PublicCourseController::class, 'show'])->where('slug', '[A-Za-z0-9_-]+');
+Route::get('/public/reading-tests', [PublicMockPracticeController::class, 'readingIndex']);
+Route::get('/public/reading-tests/{slug}', [PublicMockPracticeController::class, 'readingShow'])->where('slug', '[A-Za-z0-9_-]+');
+Route::get('/public/listening-tests', [PublicMockPracticeController::class, 'listeningIndex']);
+Route::get('/public/listening-tests/{slug}', [PublicMockPracticeController::class, 'listeningShow'])->where('slug', '[A-Za-z0-9_-]+');
 Route::post('/webhooks/cloudflare/stream', VideoWebhookController::class);
 
 Route::post('/payments/sslcommerz/ipn', [SslCommerzPaymentController::class, 'ipn']);
@@ -84,11 +95,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{order}', [OrderController::class, 'show'])->whereNumber('order');
     Route::post('/orders/{order}/payments/sslcommerz', [SslCommerzPaymentController::class, 'initiate'])->whereNumber('order');
     Route::post('/orders/{order}/payments/bkash', [BkashPaymentController::class, 'initiate'])->whereNumber('order');
+    Route::post('/orders/{order}/payments/free', [FreePaymentController::class, 'settle'])->whereNumber('order');
     Route::get('/payments/{payment}', [SslCommerzPaymentController::class, 'show'])->whereNumber('payment');
 
     Route::get('/student/dashboard', StudentDashboardController::class);
     Route::get('/student/enrollments', [EnrollmentController::class, 'index']);
     Route::get('/student/courses/{slug}', [EnrollmentController::class, 'learning'])->where('slug', '[A-Za-z0-9_-]+');
+    Route::get('/student/certificates/{certificate}', [StudentCertificateController::class, 'show'])->whereNumber('certificate');
+    Route::get('/student/skill-analytics', StudentSkillAnalyticsController::class);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
@@ -129,6 +143,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/speaking-recordings/{recording}/audio', [SpeakingRecordingController::class, 'stream'])->whereNumber('recording');
     Route::get('/student/speaking-recordings', [SpeakingRecordingController::class, 'index']);
     Route::get('/student/speaking-recordings/{recording}', [SpeakingRecordingController::class, 'show'])->whereNumber('recording');
+
+    Route::get('/full-mocks', [FullMockExamController::class, 'studentIndex']);
+    Route::get('/full-mocks/{slug}', [FullMockExamController::class, 'studentShow'])->where('slug', '[A-Za-z0-9_-]+');
+    Route::post('/full-mocks/{slug}/sessions', [FullMockSessionController::class, 'start'])->where('slug', '[A-Za-z0-9_-]+');
+    Route::get('/full-mock-sessions/{uuid}', [FullMockSessionController::class, 'show'])->whereUuid('uuid');
+    Route::post('/full-mock-sessions/{uuid}/heartbeat', [FullMockSessionController::class, 'heartbeat'])->whereUuid('uuid');
+    Route::post('/full-mock-sessions/{uuid}/abandon', [FullMockSessionController::class, 'abandon'])->whereUuid('uuid');
+    Route::post('/full-mock-sessions/{uuid}/sections/{section}/enter', [FullMockSessionController::class, 'enterSection'])->whereUuid('uuid')->whereNumber('section');
+    Route::post('/full-mock-sessions/{uuid}/sections/{section}/complete', [FullMockSessionController::class, 'completeSection'])->whereUuid('uuid')->whereNumber('section');
 
     Route::middleware('permission:writing.evaluate')->group(function () {
         Route::get('/teacher/writing-submissions', [WritingEvaluationController::class, 'index']);
@@ -209,6 +232,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/admin/orders/{order}/confirm-bkash', [AdminPaymentController::class, 'confirmBkash'])->whereNumber('order');
         Route::post('/admin/payments/{payment}/refund', [EnrollmentController::class, 'refund'])->whereNumber('payment');
 
+        Route::get('/admin/coupons', [AdminCouponController::class, 'index']);
+        Route::post('/admin/coupons', [AdminCouponController::class, 'store']);
+        Route::get('/admin/coupons/{coupon}', [AdminCouponController::class, 'show'])->whereNumber('coupon');
+        Route::put('/admin/coupons/{coupon}', [AdminCouponController::class, 'update'])->whereNumber('coupon');
+        Route::delete('/admin/coupons/{coupon}', [AdminCouponController::class, 'destroy'])->whereNumber('coupon');
+
         Route::get('/admin/finance/summary', [AdminFinanceController::class, 'summary']);
         Route::get('/admin/finance/income', [AdminFinanceController::class, 'income']);
         Route::get('/admin/finance/expenses', [AdminFinanceController::class, 'expenses']);
@@ -218,6 +247,16 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware('permission:mock_tests.manage')->group(function () {
+        Route::get('/admin/full-mocks', [FullMockExamController::class, 'index']);
+        Route::post('/admin/full-mocks', [FullMockExamController::class, 'store']);
+        Route::get('/admin/full-mocks/options/writing-tasks', [FullMockExamController::class, 'writingOptions']);
+        Route::get('/admin/full-mocks/options/speaking-tasks', [FullMockExamController::class, 'speakingOptions']);
+        Route::get('/admin/full-mocks/{fullMockExam}', [FullMockExamController::class, 'show'])->whereNumber('fullMockExam');
+        Route::put('/admin/full-mocks/{fullMockExam}', [FullMockExamController::class, 'update'])->whereNumber('fullMockExam');
+        Route::put('/admin/full-mocks/{fullMockExam}/publication', [FullMockExamController::class, 'publication'])->whereNumber('fullMockExam');
+        Route::put('/admin/full-mocks/{fullMockExam}/sections', [FullMockExamController::class, 'syncSections'])->whereNumber('fullMockExam');
+        Route::delete('/admin/full-mocks/{fullMockExam}', [FullMockExamController::class, 'destroy'])->whereNumber('fullMockExam');
+
         Route::get('/admin/reading-tests', [ReadingMockTestController::class, 'index']);
         Route::post('/admin/reading-tests', [ReadingMockTestController::class, 'store']);
         Route::get('/admin/reading-tests/{readingTest}', [ReadingMockTestController::class, 'show'])->whereNumber('readingTest');

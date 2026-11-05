@@ -146,12 +146,24 @@ class WritingEvaluationTest extends TestCase
             ]))
             ->assertStatus(422);
 
+        $draftTask = WritingTask::query()->create([
+            'exam_type' => 'academic',
+            'task_type' => WritingTask::TYPE_TASK_2,
+            'title' => 'Draft-only writing task',
+            'instructions' => null,
+            'prompt' => 'Draft prompt',
+            'recommended_minutes' => 40,
+            'min_words' => 250,
+            'is_published' => true,
+        ]);
+
         $draft = WritingSubmission::query()->create([
-            'writing_task_id' => $task->id,
+            'writing_task_id' => $draftTask->id,
             'user_id' => $otherStudent->id,
             'body' => 'draft only',
             'word_count' => 2,
             'status' => WritingSubmission::STATUS_DRAFT,
+            'context_key' => WritingSubmission::CONTEXT_PRACTICE,
         ]);
 
         Auth::forgetGuards();

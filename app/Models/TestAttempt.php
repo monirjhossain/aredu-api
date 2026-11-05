@@ -13,6 +13,8 @@ class TestAttempt extends Model
 
     public const STATUS_SUBMITTED = 'submitted';
 
+    public const CONTEXT_PRACTICE = 'practice';
+
     protected $fillable = [
         'mock_test_id',
         'user_id',
@@ -20,6 +22,7 @@ class TestAttempt extends Model
         'must_submit_at',
         'submitted_at',
         'status',
+        'context_key',
     ];
 
     protected function casts(): array

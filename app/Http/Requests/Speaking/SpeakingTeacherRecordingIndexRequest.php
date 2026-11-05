@@ -20,6 +20,7 @@ class SpeakingTeacherRecordingIndexRequest extends FormRequest
         return [
             'search' => ['nullable', 'string', 'max:100'],
             'evaluation_status' => ['nullable', Rule::in(['pending', 'evaluated'])],
+            'context' => ['nullable', Rule::in(['all', 'practice', 'full_mock'])],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
     }

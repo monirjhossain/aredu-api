@@ -152,6 +152,7 @@ class ListeningAttemptScoringTest extends TestCase
             'instructions' => 'Listen carefully.',
             'duration_seconds' => 2400,
             'is_published' => true,
+            'is_free_sample' => true,
         ]);
 
         $mcqQuestionId = 0;

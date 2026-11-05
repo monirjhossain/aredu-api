@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\Activity\ActivityLogService;
+use App\Services\Payment\PaymentService;
 use App\Services\Settings\SettingService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -23,6 +24,7 @@ class OrderService
     public function __construct(
         private readonly SettingService $settings,
         private readonly ActivityLogService $activity,
+        private readonly PaymentService $payments,
     ) {}
 
     /**
@@ -38,7 +40,7 @@ class OrderService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $ids, $couponCode) {
+        $owned = DB::transaction(function () use ($user, $ids, $couponCode) {
             $courses = Course::query()
                 ->whereIn('id', $ids)
                 ->where('is_published', true)
@@ -64,7 +66,9 @@ class OrderService
                 $unit = $this->money($course->price);
                 $discount = $course->discount_price !== null ? $this->money($course->discount_price) : null;
 
-                if ($discount !== null && $discount >= $unit) {
+                // Paid courses: discount must be strictly below list price.
+                // Free courses (unit 0): discount must be null or 0.
+                if ($discount !== null && (($unit <= 0 && $discount > 0) || ($unit > 0 && $discount >= $unit))) {
                     throw ValidationException::withMessages([
                         'course_ids' => ['A course has an invalid discount price.'],
                     ]);
@@ -101,17 +105,26 @@ class OrderService
                 ]);
             }
 
-            $owned = $this->findOwned($user, $order->id);
+            $created = $this->findOwned($user, $order->id);
 
             $this->activity->record(
                 $user,
                 'order.created',
-                $owned,
-                'Order '.$owned->order_number.' created for '.$owned->total.' '.$owned->currency.'.',
+                $created,
+                'Order '.$created->order_number.' created for '.$created->total.' '.$created->currency.'.',
             );
 
-            return $owned;
+            return $created;
         });
+
+        // Free / 100% coupon: enroll immediately so the order is never stuck pending.
+        if ((float) $owned->total <= 0.009) {
+            $this->payments->settleZeroTotal($user, $owned);
+
+            return $this->findOwned($user, $owned->id);
+        }
+
+        return $owned;
     }
 
     public function paginateFor(User $user): LengthAwarePaginator

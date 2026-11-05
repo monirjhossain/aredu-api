@@ -9,6 +9,7 @@ use App\Http\Responses\ApiResponse;
 use App\Models\WritingSubmission;
 use App\Models\WritingTask;
 use App\Services\Writing\WritingSubmissionService;
+use App\Support\ExamContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -18,9 +19,11 @@ class WritingSubmissionController extends Controller
 
     public function showForTask(Request $request, WritingTask $writingTask): JsonResponse
     {
+        $contextKey = ExamContext::normalize($request->query('context_key'));
+
         return ApiResponse::success(
             WritingSubmissionResource::make(
-                $this->submissions->forStudentTask($request->user(), $writingTask)->load('task')
+                $this->submissions->forStudentTask($request->user(), $writingTask, $contextKey)->load('task')
             )->resolve(),
             'Writing submission retrieved.',
         );
@@ -28,9 +31,11 @@ class WritingSubmissionController extends Controller
 
     public function saveDraft(WritingSubmissionRequest $request, WritingTask $writingTask): JsonResponse
     {
+        $contextKey = ExamContext::normalize($request->input('context_key', $request->query('context_key')));
+
         return ApiResponse::success(
             WritingSubmissionResource::make(
-                $this->submissions->saveDraft($request->user(), $writingTask, $request->validated())
+                $this->submissions->saveDraft($request->user(), $writingTask, $request->validated(), $contextKey)
             )->resolve(),
             'Draft saved.',
         );
@@ -38,9 +43,11 @@ class WritingSubmissionController extends Controller
 
     public function submit(WritingSubmissionRequest $request, WritingTask $writingTask): JsonResponse
     {
+        $contextKey = ExamContext::normalize($request->input('context_key', $request->query('context_key')));
+
         return ApiResponse::success(
             WritingSubmissionResource::make(
-                $this->submissions->submit($request->user(), $writingTask, $request->validated())
+                $this->submissions->submit($request->user(), $writingTask, $request->validated(), $contextKey)
             )->resolve(),
             'Writing submitted.',
         );

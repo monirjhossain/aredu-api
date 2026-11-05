@@ -23,12 +23,14 @@ class MockTest extends Model
         'instructions',
         'duration_seconds',
         'is_published',
+        'is_free_sample',
     ];
 
     protected function casts(): array
     {
         return [
             'is_published' => 'boolean',
+            'is_free_sample' => 'boolean',
         ];
     }
 

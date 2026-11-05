@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Course;
+use App\Models\CourseCategory;
+use App\Models\Enrollment;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SpeakingEvaluation;
@@ -45,6 +48,7 @@ class SpeakingRecordingEvaluationTest extends TestCase
         ]);
 
         $student = $this->userWithRole('student');
+        $this->enroll($student);
         $teacher = $this->userWithRole('teacher');
         $other = $this->userWithRole('student');
         $unassigned = $this->userWithPermission('courses.view_assigned');
@@ -148,6 +152,28 @@ class SpeakingRecordingEvaluationTest extends TestCase
         Auth::forgetGuards();
 
         return $user;
+    }
+
+    private function enroll(User $student): void
+    {
+        $category = CourseCategory::query()->firstOrCreate(
+            ['slug' => 'practice-access'],
+            ['name' => 'Practice Access'],
+        );
+        $course = Course::query()->create([
+            'category_id' => $category->id,
+            'title' => 'Access Course',
+            'slug' => 'access-'.uniqid(),
+            'exam_type' => 'academic',
+            'price' => 0,
+            'is_published' => true,
+        ]);
+        Enrollment::query()->create([
+            'user_id' => $student->id,
+            'course_id' => $course->id,
+            'status' => Enrollment::ACTIVE,
+            'enrolled_at' => now(),
+        ]);
     }
 
     private function userWithPermission(string $permissionSlug): User
