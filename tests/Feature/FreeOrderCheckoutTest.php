@@ -49,6 +49,14 @@ class FreeOrderCheckoutTest extends TestCase
         Auth::forgetGuards();
         $this->withToken($admin->createToken('api')->plainTextToken)
             ->postJson('/api/v1/admin/orders/'.$created->json('data.id').'/confirm-bkash', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['trx_id']);
+
+        Auth::forgetGuards();
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->postJson('/api/v1/admin/orders/'.$created->json('data.id').'/confirm-bkash', [
+                'trx_id' => 'FREE-ACTIVATE-1',
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'paid');
 

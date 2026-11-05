@@ -83,7 +83,7 @@ class AdminPaymentController extends Controller
         $payment = $this->payments->confirmManualBkash(
             $request->user(),
             $order,
-            $request->validated('trx_id'),
+            (string) $request->validated('trx_id'),
         );
 
         return ApiResponse::success(

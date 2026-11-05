@@ -490,7 +490,7 @@ class PaymentService
     /**
      * Manual bKash QR payment confirmation by admin (no gateway API).
      */
-    public function confirmManualBkash(User $admin, Order $order, ?string $trxId = null): Payment
+    public function confirmManualBkash(User $admin, Order $order, string $trxId): Payment
     {
         if ($order->status === Order::PAID) {
             throw ValidationException::withMessages([
@@ -504,9 +504,11 @@ class PaymentService
             ]);
         }
 
-        $reference = trim((string) $trxId);
+        $reference = trim($trxId);
         if ($reference === '') {
-            $reference = 'BKASH-QR-'.$order->order_number;
+            throw ValidationException::withMessages([
+                'trx_id' => ['TrxID is required to confirm bKash payment.'],
+            ]);
         }
 
         $payment = Payment::query()->create([
