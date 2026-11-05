@@ -15,31 +15,45 @@ class FreeMockSampleSeeder extends Seeder
             DemoListeningMockSeeder::class,
         ]);
 
-        $readingSlugs = [
+        // Best-practice free lead-ins: 2 Reading + 2 Listening. Remaining published
+        // mocks stay enrollment-gated via PracticeAccessService.
+        $freeSlugs = [
             'reading-climate-01',
             'reading-library-02',
+            'listening-demo-campus-tour-1',
+            'listening-demo-library-orientation-2',
         ];
 
-        $listeningSlugs = MockTest::query()
-            ->where('module', MockTest::MODULE_LISTENING)
+        // Everything else published becomes paid/enrolled practice.
+        MockTest::query()
+            ->whereIn('module', [MockTest::MODULE_READING, MockTest::MODULE_LISTENING])
             ->where('is_published', true)
-            ->orderBy('id')
-            ->limit(2)
-            ->pluck('slug')
-            ->all();
-
-        $slugs = array_values(array_unique([...$readingSlugs, ...$listeningSlugs]));
+            ->whereNotIn('slug', $freeSlugs)
+            ->update(['is_free_sample' => false]);
 
         $updated = MockTest::query()
-            ->whereIn('slug', $slugs)
+            ->whereIn('slug', $freeSlugs)
             ->update([
                 'is_published' => true,
                 'is_free_sample' => true,
             ]);
 
+        $freeCount = MockTest::query()
+            ->whereIn('module', [MockTest::MODULE_READING, MockTest::MODULE_LISTENING])
+            ->where('is_published', true)
+            ->where('is_free_sample', true)
+            ->count();
+
+        $paidCount = MockTest::query()
+            ->whereIn('module', [MockTest::MODULE_READING, MockTest::MODULE_LISTENING])
+            ->where('is_published', true)
+            ->where('is_free_sample', false)
+            ->count();
+
         $this->command?->info("Free mock samples ready: {$updated} tests flagged for /free-practice");
-        foreach ($slugs as $slug) {
-            $this->command?->line(' - '.$slug);
+        foreach ($freeSlugs as $slug) {
+            $this->command?->line(' - free: '.$slug);
         }
+        $this->command?->info("Practice split — free: {$freeCount}, enrollment-only: {$paidCount}");
     }
 }

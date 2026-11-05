@@ -18,6 +18,8 @@ class DemoFullMockExamSeeder extends Seeder
 {
     public const SLUG = 'demo-academic-full-mock';
 
+    public const PAID_SLUG = 'demo-academic-full-mock-enrolled';
+
     public function run(): void
     {
         $this->call([
@@ -28,18 +30,33 @@ class DemoFullMockExamSeeder extends Seeder
             DemoSpeakingSeeder::class,
         ]);
 
-        $listening = MockTest::query()
+        $freeListening = MockTest::query()
             ->where('module', MockTest::MODULE_LISTENING)
             ->where('is_published', true)
-            ->orderByDesc('is_free_sample')
+            ->where('is_free_sample', true)
             ->orderBy('id')
             ->first();
 
-        $reading = MockTest::query()
+        $paidListening = MockTest::query()
+            ->where('module', MockTest::MODULE_LISTENING)
+            ->where('is_published', true)
+            ->where('is_free_sample', false)
+            ->orderBy('id')
+            ->first();
+
+        $freeReading = MockTest::query()
             ->where('module', MockTest::MODULE_READING)
             ->where('exam_type', 'academic')
             ->where('is_published', true)
-            ->orderByDesc('is_free_sample')
+            ->where('is_free_sample', true)
+            ->orderBy('id')
+            ->first();
+
+        $paidReading = MockTest::query()
+            ->where('module', MockTest::MODULE_READING)
+            ->where('exam_type', 'academic')
+            ->where('is_published', true)
+            ->where('is_free_sample', false)
             ->orderBy('id')
             ->first();
 
@@ -50,28 +67,77 @@ class DemoFullMockExamSeeder extends Seeder
             ->orderBy('id')
             ->first();
 
+        $writingPaid = WritingTask::query()
+            ->where('exam_type', 'academic')
+            ->where('task_type', WritingTask::TYPE_TASK_2)
+            ->where('is_published', true)
+            ->where('id', '!=', $writing?->id)
+            ->orderBy('id')
+            ->first() ?? $writing;
+
         $speaking = SpeakingTask::query()
             ->where('part', SpeakingTask::PART_2)
             ->where('is_published', true)
             ->orderBy('id')
             ->first();
 
-        if ($listening === null || $reading === null || $writing === null || $speaking === null) {
+        $speakingPaid = SpeakingTask::query()
+            ->where('part', SpeakingTask::PART_2)
+            ->where('is_published', true)
+            ->where('id', '!=', $speaking?->id)
+            ->orderBy('id')
+            ->first() ?? $speaking;
+
+        if ($freeListening === null || $freeReading === null || $writing === null || $speaking === null) {
             $this->command?->warn('DemoFullMockExamSeeder skipped: missing published L/R/W/S content.');
 
             return;
         }
 
-        DB::transaction(function () use ($listening, $reading, $writing, $speaking) {
+        $this->seedExam(
+            slug: self::SLUG,
+            title: 'Demo Academic Full IELTS Mock (Free)',
+            isFree: true,
+            listening: $freeListening,
+            reading: $freeReading,
+            writing: $writing,
+            speaking: $speaking,
+        );
+
+        if ($paidListening !== null && $paidReading !== null && $writingPaid !== null && $speakingPaid !== null) {
+            $this->seedExam(
+                slug: self::PAID_SLUG,
+                title: 'Demo Academic Full IELTS Mock (Enrolled)',
+                isFree: false,
+                listening: $paidListening,
+                reading: $paidReading,
+                writing: $writingPaid,
+                speaking: $speakingPaid,
+            );
+        } else {
+            $this->command?->warn('Paid full mock skipped: need enrollment-only R/L content.');
+        }
+    }
+
+    private function seedExam(
+        string $slug,
+        string $title,
+        bool $isFree,
+        MockTest $listening,
+        MockTest $reading,
+        WritingTask $writing,
+        SpeakingTask $speaking,
+    ): void {
+        DB::transaction(function () use ($slug, $title, $isFree, $listening, $reading, $writing, $speaking) {
             $exam = FullMockExam::query()->updateOrCreate(
-                ['slug' => self::SLUG],
+                ['slug' => $slug],
                 [
                     'exam_type' => FullMockExam::TYPE_ACADEMIC,
-                    'title' => 'Demo Academic Full IELTS Mock',
+                    'title' => $title,
                     'instructions' => "This demo full mock links existing published practice content.\n"
                         ."Complete Listening → Reading → Writing → Speaking in order.\n"
                         .'You may resume if interrupted. Writing and Speaking scores require teacher evaluation.',
-                    'is_free' => true,
+                    'is_free' => $isFree,
                     'allow_resume' => true,
                     'is_published' => false,
                 ],
@@ -149,7 +215,8 @@ class DemoFullMockExamSeeder extends Seeder
             $exam->save();
         });
 
-        $this->command?->info('Demo full mock ready: /full-mocks/'.self::SLUG);
+        $label = $isFree ? 'free' : 'enrollment-only';
+        $this->command?->info("Demo full mock ready ({$label}): /full-mocks/{$slug}");
         $this->command?->line(' - Listening #'.$listening->id.' '.$listening->slug);
         $this->command?->line(' - Reading #'.$reading->id.' '.$reading->slug);
         $this->command?->line(' - Writing #'.$writing->id.' '.$writing->title);

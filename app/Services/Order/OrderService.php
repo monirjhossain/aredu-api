@@ -10,7 +10,6 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\Activity\ActivityLogService;
-use App\Services\Payment\PaymentService;
 use App\Services\Settings\SettingService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -24,7 +23,6 @@ class OrderService
     public function __construct(
         private readonly SettingService $settings,
         private readonly ActivityLogService $activity,
-        private readonly PaymentService $payments,
     ) {}
 
     /**
@@ -117,13 +115,8 @@ class OrderService
             return $created;
         });
 
-        // Free / 100% coupon: enroll immediately so the order is never stuck pending.
-        if ((float) $owned->total <= 0.009) {
-            $this->payments->settleZeroTotal($user, $owned);
-
-            return $this->findOwned($user, $owned->id);
-        }
-
+        // Zero-total (free course / 100% coupon) stays pending until admin activates
+        // the package — same manual gate as bKash QR confirmation.
         return $owned;
     }
 

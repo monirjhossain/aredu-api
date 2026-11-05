@@ -25,7 +25,7 @@ class FreeOrderCheckoutTest extends TestCase
         $this->seed(RoleAndPermissionSeeder::class);
     }
 
-    public function test_zero_price_course_order_is_auto_settled_and_enrolls(): void
+    public function test_zero_price_course_order_stays_pending_until_admin_activates(): void
     {
         $course = $this->course('free-writing', '0.00');
         $student = $this->student();
@@ -34,10 +34,23 @@ class FreeOrderCheckoutTest extends TestCase
         $created = $this->withToken($token)
             ->postJson('/api/v1/orders', ['course_ids' => [$course->id]])
             ->assertCreated()
-            ->assertJsonPath('data.status', 'paid')
-            ->assertJsonPath('data.total', '0.00')
-            ->assertJsonPath('data.payments.0.gateway', Payment::GATEWAY_FREE)
-            ->assertJsonPath('data.payments.0.status', Payment::PAID);
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.total', '0.00');
+
+        $this->assertFalse(
+            Enrollment::query()
+                ->where('user_id', $student->id)
+                ->where('course_id', $course->id)
+                ->where('status', 'active')
+                ->exists()
+        );
+
+        $admin = $this->admin();
+        Auth::forgetGuards();
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->postJson('/api/v1/admin/orders/'.$created->json('data.id').'/confirm-bkash', [])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'paid');
 
         $this->assertTrue(
             Enrollment::query()
@@ -46,17 +59,9 @@ class FreeOrderCheckoutTest extends TestCase
                 ->where('status', 'active')
                 ->exists()
         );
-
-        Auth::forgetGuards();
-        $this->withToken($token)
-            ->postJson('/api/v1/orders/'.$created->json('data.id').'/payments/free')
-            ->assertOk()
-            ->assertJsonPath('data.status', 'paid');
-
-        $this->assertSame(1, Payment::query()->where('gateway', Payment::GATEWAY_FREE)->count());
     }
 
-    public function test_hundred_percent_coupon_auto_settles_order(): void
+    public function test_hundred_percent_coupon_stays_pending_until_admin_activates(): void
     {
         $course = $this->course('coupon-writing', '1200.00');
         $student = $this->student();
@@ -70,17 +75,33 @@ class FreeOrderCheckoutTest extends TestCase
             'max_uses' => 10,
         ]);
 
-        $this->withToken($token)
+        $created = $this->withToken($token)
             ->postJson('/api/v1/orders', [
                 'course_ids' => [$course->id],
                 'coupon_code' => 'free100',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.status', 'paid')
+            ->assertJsonPath('data.status', 'pending')
             ->assertJsonPath('data.subtotal', '1200.00')
             ->assertJsonPath('data.discount_total', '1200.00')
-            ->assertJsonPath('data.total', '0.00')
-            ->assertJsonPath('data.payments.0.gateway', Payment::GATEWAY_FREE);
+            ->assertJsonPath('data.total', '0.00');
+
+        $this->assertFalse(
+            Enrollment::query()
+                ->where('user_id', $student->id)
+                ->where('course_id', $course->id)
+                ->where('status', 'active')
+                ->exists()
+        );
+
+        $admin = $this->admin();
+        Auth::forgetGuards();
+        $this->withToken($admin->createToken('api')->plainTextToken)
+            ->postJson('/api/v1/admin/orders/'.$created->json('data.id').'/confirm-bkash', [
+                'trx_id' => 'COUPON-FREE-1',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'paid');
 
         $this->assertTrue(
             Enrollment::query()
@@ -91,7 +112,7 @@ class FreeOrderCheckoutTest extends TestCase
         );
     }
 
-    public function test_pending_zero_total_order_can_be_settled_via_endpoint(): void
+    public function test_pending_zero_total_order_rejects_gateway_payments(): void
     {
         $course = $this->course('legacy-free', '0.00');
         $student = $this->student();
@@ -122,13 +143,8 @@ class FreeOrderCheckoutTest extends TestCase
             ->postJson("/api/v1/orders/{$order->id}/payments/bkash")
             ->assertStatus(422);
 
-        $this->withToken($token)
-            ->postJson("/api/v1/orders/{$order->id}/payments/free")
-            ->assertOk()
-            ->assertJsonPath('data.status', 'paid')
-            ->assertJsonPath('data.payments.0.gateway', Payment::GATEWAY_FREE);
-
-        $this->assertTrue(
+        $this->assertSame(0, Payment::query()->where('order_id', $order->id)->count());
+        $this->assertFalse(
             Enrollment::query()
                 ->where('user_id', $student->id)
                 ->where('course_id', $course->id)
@@ -179,6 +195,14 @@ class FreeOrderCheckoutTest extends TestCase
     {
         $user = User::factory()->create();
         $user->roles()->attach(Role::query()->where('slug', 'student')->value('id'));
+
+        return $user;
+    }
+
+    private function admin(): User
+    {
+        $user = User::factory()->create();
+        $user->roles()->attach(Role::query()->where('slug', 'super_admin')->value('id'));
 
         return $user;
     }
